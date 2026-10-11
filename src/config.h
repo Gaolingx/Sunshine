@@ -97,6 +97,11 @@ namespace config {
       int h264_coder;  ///< Legacy NVENC H.264 entropy-coding mode.
       int spatial_aq;  ///< FFmpeg NVENC spatial adaptive-quantization mode.
       int vbv_percentage_increase;  ///< Legacy NVENC VBV buffer-size percentage increase.
+      int ldkfs;  ///< FFmpeg NVENC low delay key frame scale, zero uses the encoder default.
+      int aq_strength;  ///< FFmpeg NVENC adaptive-quantization strength, zero uses the encoder default.
+      int temporal_aq;  ///< FFmpeg NVENC temporal adaptive-quantization mode.
+      int nonref_p;  ///< FFmpeg NVENC non-reference P-frame insertion mode.
+      int weighted_pred;  ///< FFmpeg NVENC weighted-prediction mode.
     } nv_legacy;  ///< Legacy NVIDIA encoder options kept for config compatibility.
 
     struct {

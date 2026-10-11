@@ -311,7 +311,10 @@ namespace NVENC_NAMESPACE {
     enc_config.rcParams.rateControlMode = NV_ENC_PARAMS_RC_CBR;
     enc_config.rcParams.zeroReorderDelay = 1;
     enc_config.rcParams.enableLookahead = 0;
-    enc_config.rcParams.lowDelayKeyFrameScale = 1;
+    // Leave the driver default in place, it is derived from the tuning info
+    if (config.low_delay_key_frame_scale > 0) {
+      enc_config.rcParams.lowDelayKeyFrameScale = config.low_delay_key_frame_scale;
+    }
 
     using enum ::nvenc::nvenc_two_pass;
     if (config.two_pass == quarter_resolution) {
@@ -323,6 +326,18 @@ namespace NVENC_NAMESPACE {
     }
 
     enc_config.rcParams.enableAQ = config.adaptive_quantization;
+    if (config.aq_strength > 0) {
+      // The field stores four bits, higher values are truncated by the driver
+      enc_config.rcParams.aqStrength = std::min(config.aq_strength, 15);
+    }
+    enc_config.rcParams.enableNonRefP = config.non_reference_p_frames;
+    if (config.temporal_adaptive_quantization) {
+      if (get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ)) {
+        enc_config.rcParams.enableTemporalAQ = 1;
+      } else {
+        BOOST_LOG(warning) << "NvEnc: gpu doesn't support temporal AQ";
+      }
+    }
     enc_config.rcParams.averageBitRate = client_config.bitrate * 1000;
     if (get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE)) {
       enc_config.rcParams.vbvBufferSize = client_config.bitrate * 1000 / client_config.framerate;
@@ -426,6 +441,13 @@ namespace NVENC_NAMESPACE {
       enc_config.rcParams.enableMinQP = 1;
       enc_config.rcParams.minQP.qpInterP = config.min_qp_h264;
       enc_config.rcParams.minQP.qpIntra = config.min_qp_h264;
+      enc_config.rcParams.minQP.qpInterB = config.min_qp_h264;
+    }
+    if (config.enable_max_qp) {
+      enc_config.rcParams.enableMaxQP = 1;
+      enc_config.rcParams.maxQP.qpInterP = config.max_qp_h264;
+      enc_config.rcParams.maxQP.qpIntra = config.max_qp_h264;
+      enc_config.rcParams.maxQP.qpInterB = config.max_qp_h264;
     }
 
     configure_h264_hevc_metadata(format_config, client_config, colorspace, buffer_format, encode_guid);
@@ -462,6 +484,13 @@ namespace NVENC_NAMESPACE {
       enc_config.rcParams.enableMinQP = 1;
       enc_config.rcParams.minQP.qpInterP = config.min_qp_hevc;
       enc_config.rcParams.minQP.qpIntra = config.min_qp_hevc;
+      enc_config.rcParams.minQP.qpInterB = config.min_qp_hevc;
+    }
+    if (config.enable_max_qp) {
+      enc_config.rcParams.enableMaxQP = 1;
+      enc_config.rcParams.maxQP.qpInterP = config.max_qp_hevc;
+      enc_config.rcParams.maxQP.qpIntra = config.max_qp_hevc;
+      enc_config.rcParams.maxQP.qpInterB = config.max_qp_hevc;
     }
 
     configure_h264_hevc_metadata(format_config, client_config, colorspace, buffer_format, encode_guid);
@@ -503,6 +532,13 @@ namespace NVENC_NAMESPACE {
       enc_config.rcParams.enableMinQP = 1;
       enc_config.rcParams.minQP.qpInterP = config.min_qp_av1;
       enc_config.rcParams.minQP.qpIntra = config.min_qp_av1;
+      enc_config.rcParams.minQP.qpInterB = config.min_qp_av1;
+    }
+    if (config.enable_max_qp) {
+      enc_config.rcParams.enableMaxQP = 1;
+      enc_config.rcParams.maxQP.qpInterP = config.max_qp_av1;
+      enc_config.rcParams.maxQP.qpIntra = config.max_qp_av1;
+      enc_config.rcParams.maxQP.qpInterB = config.max_qp_av1;
     }
     if (client_config.slicesPerFrame > 1) {
       // NVENC supports power-of-two tile counts, biased toward rows.
@@ -581,6 +617,9 @@ namespace NVENC_NAMESPACE {
     if (config.vbv_percentage_increase > 0 && get_encoder_cap(init_params.encodeGUID, NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE)) {
       extra += std::format(" vbv+{}", config.vbv_percentage_increase);
     }
+    if (config.low_delay_key_frame_scale > 0) {
+      extra += std::format(" ldkfs={}", config.low_delay_key_frame_scale);
+    }
     if (encoder_params.rfi) {
       extra += " rfi";
     }
@@ -590,8 +629,20 @@ namespace NVENC_NAMESPACE {
     if (enc_config.rcParams.enableAQ) {
       extra += " spatial-aq";
     }
+    if (enc_config.rcParams.aqStrength != 0) {
+      extra += std::format(" aq-strength={}", enc_config.rcParams.aqStrength);
+    }
+    if (enc_config.rcParams.enableTemporalAQ) {
+      extra += " temporal-aq";
+    }
+    if (enc_config.rcParams.enableNonRefP) {
+      extra += " nonref-p";
+    }
     if (enc_config.rcParams.enableMinQP) {
       extra += std::format(" qpmin={}", enc_config.rcParams.minQP.qpInterP);
+    }
+    if (enc_config.rcParams.enableMaxQP) {
+      extra += std::format(" qpmax={}", enc_config.rcParams.maxQP.qpInterP);
     }
     if (config.insert_filler_data) {
       extra += " filler-data";

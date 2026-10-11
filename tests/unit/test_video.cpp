@@ -94,6 +94,39 @@ TEST(NvencAvcodecOptionsTest, UsesVersionStablePresetAndSpatialAqNames) {
   }
 }
 
+TEST(NvencAvcodecOptionsTest, ExposesBitrateEfficiencyOptions) {
+  const std::array codecs {
+    &video::nvenc.av1,
+    &video::nvenc.hevc,
+    &video::nvenc.h264,
+  };
+
+  const std::array<std::string_view, 5> option_names {
+    "ldkfs"sv,
+    "aq-strength"sv,
+    "temporal-aq"sv,
+    "nonref_p"sv,
+    "weighted_pred"sv,
+  };
+
+  const std::array<int *, 5> expected_targets {
+    &config::video.nv_legacy.ldkfs,
+    &config::video.nv_legacy.aq_strength,
+    &config::video.nv_legacy.temporal_aq,
+    &config::video.nv_legacy.nonref_p,
+    &config::video.nv_legacy.weighted_pred,
+  };
+
+  for (const auto *codec : codecs) {
+    for (size_t i = 0; i < option_names.size(); ++i) {
+      const auto option = std::ranges::find(codec->common_options, option_names[i], &video::encoder_t::option_t::name);
+      ASSERT_NE(codec->common_options.end(), option) << codec->name << " is missing " << option_names[i];
+      ASSERT_TRUE(std::holds_alternative<int *>(option->value));
+      EXPECT_EQ(expected_targets[i], std::get<int *>(option->value));
+    }
+  }
+}
+
 TEST(NvencAvcodecOptionsTest, TuneUsesConfiguredTuningInfo) {
   const std::array direct_tuning_codecs {
     &video::nvenc.av1,
@@ -164,6 +197,134 @@ INSTANTIATE_TEST_SUITE_P(
     NvencTuningConfigParam {"nvenc_tuning = bogus\n"sv, nvenc::nvenc_tuning_info::ultra_low_latency}
   )
 );
+
+/**
+ * @brief Coverage for the NVENC settings that trade bitrate against quality on both encoder paths.
+ */
+struct NvencQualityOptionsTest: BaseTest {
+  void SetUp() override {
+    BaseTest::SetUp();
+    original_nv = config::video.nv;
+    original_nv_legacy = config::video.nv_legacy;
+    config::video.nv = nvenc::nvenc_config {};
+    config::video.nv_legacy = {};
+    config::stream.file_apps = SUNSHINE_SOURCE_DIR "/tests/unit/test_video.cpp";
+  }
+
+  void TearDown() override {
+    config::video.nv = original_nv;
+    config::video.nv_legacy = original_nv_legacy;
+    BaseTest::TearDown();
+  }
+
+  nvenc::nvenc_config original_nv {};  ///< NVENC configuration restored after each test.
+  decltype(config::video.nv_legacy) original_nv_legacy {};  ///< FFmpeg NVENC options restored after each test.
+};
+
+TEST_F(NvencQualityOptionsTest, AppliesAdaptiveQuantizationSettings) {
+  config::apply_config_for_test(
+    "nvenc_spatial_aq = enabled\n"
+    "nvenc_temporal_aq = enabled\n"
+    "nvenc_aq_strength = 9\n"
+  );
+
+  EXPECT_TRUE(config::video.nv.adaptive_quantization);
+  EXPECT_TRUE(config::video.nv.temporal_adaptive_quantization);
+  EXPECT_EQ(9, config::video.nv.aq_strength);
+#if !defined(__ANDROID__) && !defined(__APPLE__)
+  EXPECT_EQ(1, config::video.nv_legacy.spatial_aq);
+  EXPECT_EQ(1, config::video.nv_legacy.temporal_aq);
+  EXPECT_EQ(9, config::video.nv_legacy.aq_strength);
+#endif
+}
+
+TEST_F(NvencQualityOptionsTest, KeepsDriverDefaultWhenAdaptiveQuantizationStrengthIsOutOfRange) {
+  config::apply_config_for_test("nvenc_aq_strength = 16\n");
+
+  EXPECT_EQ(0, config::video.nv.aq_strength);
+#if !defined(__ANDROID__) && !defined(__APPLE__)
+  EXPECT_EQ(0, config::video.nv_legacy.aq_strength);
+#endif
+}
+
+TEST_F(NvencQualityOptionsTest, AppliesNonReferencePFrames) {
+  config::apply_config_for_test("nvenc_nonref_p = enabled\n");
+
+  EXPECT_TRUE(config::video.nv.non_reference_p_frames);
+#if !defined(__ANDROID__) && !defined(__APPLE__)
+  EXPECT_EQ(1, config::video.nv_legacy.nonref_p);
+#endif
+}
+
+TEST_F(NvencQualityOptionsTest, AppliesWeightedPrediction) {
+  config::apply_config_for_test("nvenc_weighted_prediction = enabled\n");
+
+  EXPECT_TRUE(config::video.nv.weighted_prediction);
+#if !defined(__ANDROID__) && !defined(__APPLE__)
+  EXPECT_EQ(1, config::video.nv_legacy.weighted_pred);
+#endif
+}
+
+TEST_F(NvencQualityOptionsTest, AppliesLowDelayKeyFrameScale) {
+  config::apply_config_for_test("nvenc_ldkfs = 4\n");
+
+  EXPECT_EQ(4, config::video.nv.low_delay_key_frame_scale);
+#if !defined(__ANDROID__) && !defined(__APPLE__)
+  EXPECT_EQ(4, config::video.nv_legacy.ldkfs);
+#endif
+}
+
+TEST_F(NvencQualityOptionsTest, KeepsDriverDefaultKeyFrameScaleWhenOutOfRange) {
+  config::apply_config_for_test("nvenc_ldkfs = 11\n");
+
+  EXPECT_EQ(0, config::video.nv.low_delay_key_frame_scale);
+}
+
+TEST_F(NvencQualityOptionsTest, AppliesMinimumQpLimitsPerCodec) {
+  config::apply_config_for_test(
+    "nvenc_enable_min_qp = enabled\n"
+    "nvenc_min_qp_h264 = 20\n"
+    "nvenc_min_qp_hevc = 24\n"
+    "nvenc_min_qp_av1 = 30\n"
+  );
+
+  EXPECT_TRUE(config::video.nv.enable_min_qp);
+  EXPECT_EQ(20, config::video.nv.min_qp_h264);
+  EXPECT_EQ(24, config::video.nv.min_qp_hevc);
+  EXPECT_EQ(30, config::video.nv.min_qp_av1);
+}
+
+TEST_F(NvencQualityOptionsTest, AppliesMaximumQpLimitsPerCodec) {
+  config::apply_config_for_test(
+    "nvenc_enable_max_qp = enabled\n"
+    "nvenc_max_qp_h264 = 40\n"
+    "nvenc_max_qp_hevc = 41\n"
+    "nvenc_max_qp_av1 = 200\n"
+  );
+
+  EXPECT_TRUE(config::video.nv.enable_max_qp);
+  EXPECT_EQ(40, config::video.nv.max_qp_h264);
+  EXPECT_EQ(41, config::video.nv.max_qp_hevc);
+  EXPECT_EQ(200, config::video.nv.max_qp_av1);
+}
+
+TEST_F(NvencQualityOptionsTest, RejectsQpLimitsAboveThePerCodecRange) {
+  config::apply_config_for_test(
+    "nvenc_min_qp_h264 = 52\n"
+    "nvenc_min_qp_hevc = 52\n"
+    "nvenc_min_qp_av1 = 256\n"
+    "nvenc_max_qp_h264 = 52\n"
+    "nvenc_max_qp_hevc = -1\n"
+    "nvenc_max_qp_av1 = 256\n"
+  );
+
+  EXPECT_EQ(19, config::video.nv.min_qp_h264);
+  EXPECT_EQ(23, config::video.nv.min_qp_hevc);
+  EXPECT_EQ(23, config::video.nv.min_qp_av1);
+  EXPECT_EQ(51, config::video.nv.max_qp_h264);
+  EXPECT_EQ(51, config::video.nv.max_qp_hevc);
+  EXPECT_EQ(255, config::video.nv.max_qp_av1);
+}
 
 TEST_P(EncoderTest, ValidateEncoder) {
   // todo:: test something besides fixture setup

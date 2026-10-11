@@ -69,6 +69,22 @@ const config = ref(props.config)
               default="false"
     ></Checkbox>
 
+    <!-- Temporal AQ -->
+    <Checkbox class="mb-3"
+              id="nvenc_temporal_aq"
+              locale-prefix="config"
+              v-model="config.nvenc_temporal_aq"
+              default="false"
+    ></Checkbox>
+
+    <!-- Adaptive quantization strength -->
+    <div class="mb-3">
+      <label for="nvenc_aq_strength" class="form-label">{{ $t('config.nvenc_aq_strength') }}</label>
+      <input type="number" min="0" max="15" class="form-control" id="nvenc_aq_strength" placeholder="0"
+             v-model="config.nvenc_aq_strength" />
+      <div class="form-text">{{ $t('config.nvenc_aq_strength_desc') }}</div>
+    </div>
+
     <!-- Single-frame VBV/HRD percentage increase -->
     <div class="mb-3">
       <label for="nvenc_vbv_increase" class="form-label">{{ $t('config.nvenc_vbv_increase') }}</label>
@@ -78,6 +94,118 @@ const config = ref(props.config)
         {{ $t('config.nvenc_vbv_increase_desc') }}<br>
         <br>
         <a href="https://en.wikipedia.org/wiki/Video_buffering_verifier">VBV/HRD</a>
+      </div>
+    </div>
+
+    <!-- Advanced compression options -->
+    <div class="mb-3 accordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#panelsStayOpen-collapseTwo">
+            {{ $t('config.nvenc_compression') }}
+          </button>
+        </h2>
+        <div id="panelsStayOpen-collapseTwo" class="accordion-collapse collapse">
+          <div class="accordion-body">
+            <!-- Low delay key frame scale -->
+            <div class="mb-3">
+              <label for="nvenc_ldkfs" class="form-label">{{ $t('config.nvenc_ldkfs') }}</label>
+              <input type="number" min="0" max="10" class="form-control" id="nvenc_ldkfs" placeholder="0"
+                     v-model="config.nvenc_ldkfs" />
+              <div class="form-text">{{ $t('config.nvenc_ldkfs_desc') }}</div>
+            </div>
+
+            <!-- Non-reference P-frames -->
+            <Checkbox class="mb-3"
+                      id="nvenc_nonref_p"
+                      locale-prefix="config"
+                      v-model="config.nvenc_nonref_p"
+                      default="false"
+            ></Checkbox>
+
+            <!-- Weighted prediction -->
+            <Checkbox class="mb-3"
+                      id="nvenc_weighted_prediction"
+                      locale-prefix="config"
+                      v-model="config.nvenc_weighted_prediction"
+                      default="false"
+            ></Checkbox>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quantization parameter limits -->
+    <div class="mb-3 accordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#panelsStayOpen-collapseThree">
+            {{ $t('config.nvenc_qp_limits') }}
+          </button>
+        </h2>
+        <div id="panelsStayOpen-collapseThree" class="accordion-collapse collapse">
+          <div class="accordion-body">
+            <!-- Minimum QP limit -->
+            <Checkbox class="mb-3"
+                      id="nvenc_enable_min_qp"
+                      locale-prefix="config"
+                      v-model="config.nvenc_enable_min_qp"
+                      default="false"
+            ></Checkbox>
+
+            <div class="mb-3">
+              <label for="nvenc_min_qp_h264" class="form-label">{{ $t('config.nvenc_min_qp_h264') }}</label>
+              <input type="number" min="0" max="51" class="form-control" id="nvenc_min_qp_h264" placeholder="19"
+                     v-model="config.nvenc_min_qp_h264" />
+              <div class="form-text">{{ $t('config.nvenc_min_qp_h264_desc') }}</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="nvenc_min_qp_hevc" class="form-label">{{ $t('config.nvenc_min_qp_hevc') }}</label>
+              <input type="number" min="0" max="51" class="form-control" id="nvenc_min_qp_hevc" placeholder="23"
+                     v-model="config.nvenc_min_qp_hevc" />
+              <div class="form-text">{{ $t('config.nvenc_min_qp_hevc_desc') }}</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="nvenc_min_qp_av1" class="form-label">{{ $t('config.nvenc_min_qp_av1') }}</label>
+              <input type="number" min="0" max="255" class="form-control" id="nvenc_min_qp_av1" placeholder="23"
+                     v-model="config.nvenc_min_qp_av1" />
+              <div class="form-text">{{ $t('config.nvenc_min_qp_av1_desc') }}</div>
+            </div>
+
+            <!-- Maximum QP limit -->
+            <Checkbox class="mb-3"
+                      id="nvenc_enable_max_qp"
+                      locale-prefix="config"
+                      v-model="config.nvenc_enable_max_qp"
+                      default="false"
+            ></Checkbox>
+
+            <div class="mb-3">
+              <label for="nvenc_max_qp_h264" class="form-label">{{ $t('config.nvenc_max_qp_h264') }}</label>
+              <input type="number" min="0" max="51" class="form-control" id="nvenc_max_qp_h264" placeholder="51"
+                     v-model="config.nvenc_max_qp_h264" />
+              <div class="form-text">{{ $t('config.nvenc_max_qp_h264_desc') }}</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="nvenc_max_qp_hevc" class="form-label">{{ $t('config.nvenc_max_qp_hevc') }}</label>
+              <input type="number" min="0" max="51" class="form-control" id="nvenc_max_qp_hevc" placeholder="51"
+                     v-model="config.nvenc_max_qp_hevc" />
+              <div class="form-text">{{ $t('config.nvenc_max_qp_hevc_desc') }}</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="nvenc_max_qp_av1" class="form-label">{{ $t('config.nvenc_max_qp_av1') }}</label>
+              <input type="number" min="0" max="255" class="form-control" id="nvenc_max_qp_av1" placeholder="255"
+                     v-model="config.nvenc_max_qp_av1" />
+              <div class="form-text">{{ $t('config.nvenc_max_qp_av1_desc') }}</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

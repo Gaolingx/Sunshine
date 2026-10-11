@@ -2451,6 +2451,64 @@ supported on the current platform.
     </tr>
 </table>
 
+### nvenc_temporal_aq
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Assign more bits to frames that are temporally more important for the frames referencing them.
+            Compared to spatial AQ this improves perceived quality of motion at low bitrates, but it makes the number
+            of bits consumed per frame fluctuate more within a GOP, which works against a strict constant bitrate.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+            @warning{Enabling this option may reduce performance.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_temporal_aq = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_aq_strength
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Strength of adaptive quantization when spatial or temporal AQ is enabled. The scale runs from 1 (low) to
+            15 (aggressive), higher values redistribute more bits towards perceptually important regions at the cost of
+            a more uneven quantization.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+            @note{A value of 0 leaves the strength at the driver default.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            0
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">0-15</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_aq_strength = 0
+            @endcode</td>
+    </tr>
+</table>
+
 ### nvenc_vbv_increase
 
 <table>
@@ -2481,6 +2539,318 @@ supported on the current platform.
         <td>Example</td>
         <td colspan="2">@code{}
             nvenc_vbv_increase = 0
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_ldkfs
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Low delay key frame scale. Specifies the ratio of I frame bits to P frame bits in single frame VBV and CBR
+            rate control mode. A higher value lets the encoder produce larger intra refresh frames and gives the rate
+            controller more room to recover afterwards, a lower value restricts the intra refresh frame so that a large
+            scene change cannot be followed by a visible quality dip.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+            @note{Only used when a single frame VBV/HRD is in effect, see [nvenc_vbv_increase](#nvenc_vbv_increase).}
+            @note{A value of 0 keeps the value recommended by the selected [nvenc_tuning](#nvenc_tuning), which is 2
+            for low latency tuning info and 1 for ultra low latency tuning info.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            0
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">0-10</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_ldkfs = 0
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_nonref_p
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Insert automatically chosen non-reference P frames. Such a frame has to be visually correct on its own
+            instead of also being a good reference for later frames, which reduces the bits it consumes considerably.
+            This notably improves compression efficiency of mostly static content such as a desktop.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+            @warning{Non-reference frames are more susceptible to network packet loss.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_nonref_p = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_weighted_prediction
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Enable weighted prediction, which improves compression of fades. Only the NVENC H.264 encoder supports
+            it, and it conflicts with B frames and with adaptive quantization.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+            @warning{Enabling this option may reduce performance.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_weighted_prediction = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_enable_min_qp
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Don't use QP values below certain value. This limits the peak image quality the encoder is allowed to spend
+            bits on, which spreads the bitrate more evenly across the GOP. Useful when the rate controller cannot keep
+            up with a very low requested bitrate, at the cost of quality in the easiest frames.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_enable_min_qp = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_min_qp_h264
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Minimum QP used by the NVENC H.264 encoder when [nvenc_enable_min_qp](#nvenc_enable_min_qp) is enabled.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            19
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">0-51</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_min_qp_h264 = 19
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_min_qp_hevc
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Minimum QP used by the NVENC HEVC encoder when [nvenc_enable_min_qp](#nvenc_enable_min_qp) is enabled.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            23
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">0-51</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_min_qp_hevc = 23
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_min_qp_av1
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Minimum QP used by the NVENC AV1 encoder when [nvenc_enable_min_qp](#nvenc_enable_min_qp) is enabled.
+            AV1 uses a wider QP range than H.264 and HEVC.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            23
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">0-255</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_min_qp_av1 = 23
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_enable_max_qp
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Don't use QP values above certain value. The rate controller is allowed to keep raising the QP until a
+            frame fits into the available bitrate budget, which can turn a frame the encoder cannot afford into a
+            heavily quantized blur. Capping the QP keeps such frames recognizable and instead lets the encoder
+            overshoot the single frame VBV/HRD limit, so it is recommended to combine this option with
+            [nvenc_vbv_increase](#nvenc_vbv_increase).
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+            @warning{Can lead to network packet loss.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_enable_max_qp = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_max_qp_h264
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Maximum QP used by the NVENC H.264 encoder when [nvenc_enable_max_qp](#nvenc_enable_max_qp) is enabled.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            51
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">0-51</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_max_qp_h264 = 51
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_max_qp_hevc
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Maximum QP used by the NVENC HEVC encoder when [nvenc_enable_max_qp](#nvenc_enable_max_qp) is enabled.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            51
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">0-51</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_max_qp_hevc = 51
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_max_qp_av1
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Maximum QP used by the NVENC AV1 encoder when [nvenc_enable_max_qp](#nvenc_enable_max_qp) is enabled.
+            AV1 uses a wider QP range than H.264 and HEVC.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            255
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">0-255</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_max_qp_av1 = 255
             @endcode</td>
     </tr>
 </table>

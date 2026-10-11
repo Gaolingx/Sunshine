@@ -1635,7 +1635,20 @@ namespace config {
     int_between_f(vars, "nvenc_preset", video.nv.quality_preset, {1, 7});
     generic_f(vars, "nvenc_tuning", video.nv.tuning_info, nv::tuning_info_from_view);
     int_between_f(vars, "nvenc_vbv_increase", video.nv.vbv_percentage_increase, {0, 400});
+    int_between_f(vars, "nvenc_ldkfs", video.nv.low_delay_key_frame_scale, {0, 10});
     bool_f(vars, "nvenc_spatial_aq", video.nv.adaptive_quantization);
+    int_between_f(vars, "nvenc_aq_strength", video.nv.aq_strength, {0, 15});
+    bool_f(vars, "nvenc_temporal_aq", video.nv.temporal_adaptive_quantization);
+    bool_f(vars, "nvenc_nonref_p", video.nv.non_reference_p_frames);
+    bool_f(vars, "nvenc_weighted_prediction", video.nv.weighted_prediction);
+    bool_f(vars, "nvenc_enable_min_qp", video.nv.enable_min_qp);
+    int_between_f(vars, "nvenc_min_qp_h264", video.nv.min_qp_h264, {0, 51});
+    int_between_f(vars, "nvenc_min_qp_hevc", video.nv.min_qp_hevc, {0, 51});
+    int_between_f(vars, "nvenc_min_qp_av1", video.nv.min_qp_av1, {0, 255});
+    bool_f(vars, "nvenc_enable_max_qp", video.nv.enable_max_qp);
+    int_between_f(vars, "nvenc_max_qp_h264", video.nv.max_qp_h264, {0, 51});
+    int_between_f(vars, "nvenc_max_qp_hevc", video.nv.max_qp_hevc, {0, 51});
+    int_between_f(vars, "nvenc_max_qp_av1", video.nv.max_qp_av1, {0, 255});
     generic_f(vars, "nvenc_twopass", video.nv.two_pass, nv::twopass_from_view);
     bool_f(vars, "nvenc_h264_cavlc", video.nv.h264_cavlc);
     generic_f(vars, "nvenc_split_encode", video.nv.split_frame_encoding, nv::split_encode_from_view);
@@ -1653,6 +1666,11 @@ namespace config {
     video.nv_legacy.h264_coder = video.nv.h264_cavlc ? NV_ENC_H264_ENTROPY_CODING_MODE_CAVLC : NV_ENC_H264_ENTROPY_CODING_MODE_CABAC;
     video.nv_legacy.spatial_aq = video.nv.adaptive_quantization;
     video.nv_legacy.vbv_percentage_increase = video.nv.vbv_percentage_increase;
+    video.nv_legacy.ldkfs = video.nv.low_delay_key_frame_scale;
+    video.nv_legacy.aq_strength = video.nv.aq_strength;
+    video.nv_legacy.temporal_aq = video.nv.temporal_adaptive_quantization;
+    video.nv_legacy.nonref_p = video.nv.non_reference_p_frames;
+    video.nv_legacy.weighted_pred = video.nv.weighted_prediction;
 #endif
 
     int_f(vars, "qsv_preset", video.qsv.qsv_preset, qsv::preset_from_view);
