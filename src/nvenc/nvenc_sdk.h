@@ -122,4 +122,12 @@ namespace NVENC_NAMESPACE {  // NOSONAR(cpp:S3261)
     NV_ENC_VUI_MATRIX_COEFFS_SMPTE2085 = 11,
   };
 #endif
+#if NVENC_SDK_VERSION < 1300
+  /**
+   * @brief Tuning info value exposed as a named constant starting with SDK 13.0.
+   *
+   * The value is passed to the driver as a plain integer, so older headers can still request it.
+   */
+  constexpr NV_ENC_TUNING_INFO NV_ENC_TUNING_INFO_ULTRA_HIGH_QUALITY = static_cast<NV_ENC_TUNING_INFO>(5);
+#endif
 }  // namespace NVENC_NAMESPACE

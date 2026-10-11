@@ -180,6 +180,55 @@ namespace {
     return "Unknown";
   }
 
+  /**
+   * @brief Get the short tuning info name used in log messages.
+   *
+   * @param tuning_info Encoder tuning info.
+   * @return Tuning info name, or `unknown` when it is not recognized.
+   */
+  const char *tuning_info_name(NV_ENC_TUNING_INFO tuning_info) {
+    switch (tuning_info) {
+      case NV_ENC_TUNING_INFO_HIGH_QUALITY:
+        return "hq";
+      case NV_ENC_TUNING_INFO_LOW_LATENCY:
+        return "ll";
+      case NV_ENC_TUNING_INFO_ULTRA_HIGH_QUALITY:
+        return "uhq";
+      case NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY:
+        return "ull";
+      default:
+        return "unknown";
+    }
+  }
+
+  /**
+   * @brief Convert the configured tuning info into the value used by the encoder.
+   *
+   * Ultra high quality tuning is not supported for H.264, which falls back to high quality tuning.
+   *
+   * @param tuning_info Configured tuning info.
+   * @param video_format Requested video format: 0 for H.264, 1 for HEVC, 2 for AV1.
+   * @return Tuning info passed to the encoder.
+   */
+  NV_ENC_TUNING_INFO tuning_info_from_config(const ::nvenc::nvenc_tuning_info tuning_info, const int video_format) {
+    using enum ::nvenc::nvenc_tuning_info;
+    switch (tuning_info) {
+      case high_quality:
+        return NV_ENC_TUNING_INFO_HIGH_QUALITY;
+      case low_latency:
+        return NV_ENC_TUNING_INFO_LOW_LATENCY;
+      case ultra_high_quality:
+        if (video_format == 0) {
+          BOOST_LOG(warning) << "NvEnc: ultra high quality tuning is not supported for H.264, using high quality tuning";
+          return NV_ENC_TUNING_INFO_HIGH_QUALITY;
+        }
+        return NV_ENC_TUNING_INFO_ULTRA_HIGH_QUALITY;
+      case ultra_low_latency:
+        break;
+    }
+    return NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY;
+  }
+
 }  // namespace
 
 namespace NVENC_NAMESPACE {
@@ -559,7 +608,8 @@ namespace NVENC_NAMESPACE {
 
     BOOST_LOG(info) << "NvEnc: created encoder v" << NVENC_SDK_VERSION << " "
                     << video_format_name(client_config.videoFormat)
-                    << quality_preset_string_from_guid(init_params.presetGUID) << extra;
+                    << quality_preset_string_from_guid(init_params.presetGUID) << " "
+                    << tuning_info_name(init_params.tuningInfo) << extra;
   }
 
   bool nvenc_base::create_encoder(
@@ -635,7 +685,7 @@ namespace NVENC_NAMESPACE {
     }
 
     init_params.presetGUID = quality_preset_guid_from_number(config.quality_preset);
-    init_params.tuningInfo = NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY;
+    init_params.tuningInfo = tuning_info_from_config(config.tuning_info, client_config.videoFormat);
     init_params.enablePTD = 1;
     init_params.enableEncodeAsync = async_event_handle ? 1 : 0;
     init_params.enableWeightedPrediction = config.weighted_prediction &&

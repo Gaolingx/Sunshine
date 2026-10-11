@@ -27,6 +27,18 @@ const config = ref(props.config)
       <div class="form-text">{{ $t('config.nvenc_preset_desc') }}</div>
     </div>
 
+    <!-- Tuning info -->
+    <div class="mb-3">
+      <label for="nvenc_tuning" class="form-label">{{ $t('config.nvenc_tuning') }}</label>
+      <select id="nvenc_tuning" class="form-select" v-model="config.nvenc_tuning">
+        <option value="ull">{{ $t('config.nvenc_tuning_ull_def') }}</option>
+        <option value="ll">{{ $t('config.nvenc_tuning_ll') }}</option>
+        <option value="hq">{{ $t('config.nvenc_tuning_hq') }}</option>
+        <option value="uhq">{{ $t('config.nvenc_tuning_uhq') }}</option>
+      </select>
+      <div class="form-text">{{ $t('config.nvenc_tuning_desc') }}</div>
+    </div>
+
     <!-- Split frame encoding -->
     <div class="mb-3" v-if="platform === 'windows'">
       <label for="nvenc_split_encode" class="form-label">{{ $t('config.nvenc_split_encode') }}</label>

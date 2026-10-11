@@ -2341,6 +2341,50 @@ supported on the current platform.
     </tr>
 </table>
 
+### nvenc_tuning
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            NVENC encoder tuning info, which changes what the performance preset optimizes for.
+            Lower latency modes reduce encoding delay at the cost of compression efficiency.
+            Ultra high quality is only supported by HEVC and AV1 on Turing or newer GPUs, selecting it with H.264
+            falls back to high quality.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            ull
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_tuning = ull
+            @endcode</td>
+    </tr>
+    <tr>
+        <td rowspan="4">Choices</td>
+        <td>hq</td>
+        <td>High quality</td>
+    </tr>
+    <tr>
+        <td>ll</td>
+        <td>Low latency</td>
+    </tr>
+    <tr>
+        <td>ull (default)</td>
+        <td>Ultra low latency</td>
+    </tr>
+    <tr>
+        <td>uhq</td>
+        <td>Ultra high quality</td>
+    </tr>
+</table>
+
 ### nvenc_twopass
 
 <table>

@@ -16,6 +16,19 @@ namespace nvenc {
   };
 
   /**
+   * @brief Enumerates supported nVENC tuning info options.
+   *
+   * Values match NV_ENC_TUNING_INFO from the NVENC SDK, which keeps them usable for both the NVENC API and the
+   * FFmpeg `tune` option. Lossless tuning is not exposed because it requires rate control that Sunshine does not use.
+   */
+  enum class nvenc_tuning_info {
+    high_quality = 1,  ///< Tune presets for latency tolerant encoding
+    low_latency = 2,  ///< Tune presets for low latency streaming
+    ultra_low_latency = 3,  ///< Tune presets for ultra low latency streaming
+    ultra_high_quality = 5,  ///< Latency tolerant presets with higher quality, only supported for HEVC and AV1 on Turing and newer
+  };
+
+  /**
    * @brief Enumerates supported nVENC split frame encoding options.
    */
   enum class nvenc_split_frame_encoding {
@@ -30,6 +43,9 @@ namespace nvenc {
   struct nvenc_config {
     // Quality preset from 1 to 7, higher is slower
     int quality_preset = 1;  ///< Quality preset.
+
+    // Change what the quality preset optimizes for, changing it requires encoding session recreation
+    nvenc_tuning_info tuning_info = nvenc_tuning_info::ultra_low_latency;  ///< Tuning info.
 
     // Use optional preliminary pass for better motion vectors, bitrate distribution and stricter VBV(HRD), uses CUDA cores
     nvenc_two_pass two_pass = nvenc_two_pass::quarter_resolution;  ///< Two pass.

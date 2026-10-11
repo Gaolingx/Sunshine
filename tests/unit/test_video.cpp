@@ -8,6 +8,8 @@
 // standard includes
 #include <algorithm>
 #include <array>
+#include <bit>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <tuple>
@@ -91,7 +93,77 @@ TEST(NvencAvcodecOptionsTest, UsesVersionStablePresetAndSpatialAqNames) {
     );
   }
 }
+
+TEST(NvencAvcodecOptionsTest, TuneUsesConfiguredTuningInfo) {
+  const std::array direct_tuning_codecs {
+    &video::nvenc.av1,
+    &video::nvenc.hevc,
+  };
+
+  for (const auto *codec : direct_tuning_codecs) {
+    const auto tune = std::ranges::find(codec->common_options, "tune"sv, &video::encoder_t::option_t::name);
+    ASSERT_NE(codec->common_options.end(), tune);
+    ASSERT_TRUE(std::holds_alternative<int *>(tune->value));
+    EXPECT_EQ(&config::video.nv_legacy.tune, std::get<int *>(tune->value));
+  }
+
+  const auto h264_tune = std::ranges::find(video::nvenc.h264.common_options, "tune"sv, &video::encoder_t::option_t::name);
+  ASSERT_NE(video::nvenc.h264.common_options.end(), h264_tune);
+  ASSERT_TRUE(std::holds_alternative<std::function<int()>>(h264_tune->value));
+  const auto &h264_tune_value = std::get<std::function<int()>>(h264_tune->value);
+
+  config::video.nv_legacy.tune = std::to_underlying(nvenc::nvenc_tuning_info::ultra_high_quality);
+  EXPECT_EQ(std::to_underlying(nvenc::nvenc_tuning_info::high_quality), h264_tune_value());
+
+  config::video.nv_legacy.tune = std::to_underlying(nvenc::nvenc_tuning_info::low_latency);
+  EXPECT_EQ(std::to_underlying(nvenc::nvenc_tuning_info::low_latency), h264_tune_value());
+}
 #endif
+
+using NvencTuningConfigParam = std::tuple<std::string_view, nvenc::nvenc_tuning_info>;
+
+/**
+ * @brief Parameterized coverage for parsing the NVENC tuning info setting.
+ */
+struct NvencTuningConfigTest: BaseTest, testing::WithParamInterface<NvencTuningConfigParam> {
+  void SetUp() override {
+    BaseTest::SetUp();
+    original_nv = config::video.nv;
+    original_nv_legacy_tune = config::video.nv_legacy.tune;
+    config::stream.file_apps = SUNSHINE_SOURCE_DIR "/tests/unit/test_video.cpp";
+  }
+
+  void TearDown() override {
+    config::video.nv = original_nv;
+    config::video.nv_legacy.tune = original_nv_legacy_tune;
+    BaseTest::TearDown();
+  }
+
+  nvenc::nvenc_config original_nv {};  ///< NVENC configuration restored after each parameterized test.
+  int original_nv_legacy_tune {};  ///< FFmpeg NVENC tuning info restored after each parameterized test.
+};
+
+TEST_P(NvencTuningConfigTest, ParsesTuningInfoAndMapsItToFfmpegOption) {
+  const auto &[setting, expected] = GetParam();
+  config::apply_config_for_test(setting);
+
+  EXPECT_EQ(expected, config::video.nv.tuning_info);
+#if !defined(__ANDROID__) && !defined(__APPLE__)
+  EXPECT_EQ(std::to_underlying(expected), config::video.nv_legacy.tune);
+#endif
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  NvencTuningValues,
+  NvencTuningConfigTest,
+  testing::Values(
+    NvencTuningConfigParam {"nvenc_tuning = hq\n"sv, nvenc::nvenc_tuning_info::high_quality},
+    NvencTuningConfigParam {"nvenc_tuning = ll\n"sv, nvenc::nvenc_tuning_info::low_latency},
+    NvencTuningConfigParam {"nvenc_tuning = ull\n"sv, nvenc::nvenc_tuning_info::ultra_low_latency},
+    NvencTuningConfigParam {"nvenc_tuning = uhq\n"sv, nvenc::nvenc_tuning_info::ultra_high_quality},
+    NvencTuningConfigParam {"nvenc_tuning = bogus\n"sv, nvenc::nvenc_tuning_info::ultra_low_latency}
+  )
+);
 
 TEST_P(EncoderTest, ValidateEncoder) {
   // todo:: test something besides fixture setup

@@ -25,6 +25,14 @@ namespace config {
      * @return FFmpeg preset name from `p1` through `p7`.
      */
     std::string ffmpeg_preset_from_quality(int quality_preset);
+
+    /**
+     * @brief Parse the `nvenc_tuning` configuration value.
+     *
+     * @param tuning Tuning info value supplied by the configuration: `hq`, `ll`, `ull`, or `uhq`.
+     * @return Parsed tuning info, or ultra low latency when the text is unknown.
+     */
+    nvenc::nvenc_tuning_info tuning_info_from_view(const std::string_view &tuning);
   }  // namespace nv
 
   // Valid range for the packetsize limit
@@ -84,6 +92,7 @@ namespace config {
 
     struct {
       std::string preset;  ///< FFmpeg NVENC preset name shared by supported FFmpeg versions.
+      int tune;  ///< FFmpeg NVENC tuning info value shared by supported FFmpeg versions.
       int multipass;  ///< Legacy NVENC multipass mode.
       int h264_coder;  ///< Legacy NVENC H.264 entropy-coding mode.
       int spatial_aq;  ///< FFmpeg NVENC spatial adaptive-quantization mode.

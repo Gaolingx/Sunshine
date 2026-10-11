@@ -786,7 +786,7 @@ namespace video {
         {"surfaces"s, 1},
         {"cbr_padding"s, false},
         {"preset"s, &config::video.nv_legacy.preset},
-        {"tune"s, NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY},
+        {"tune"s, &config::video.nv_legacy.tune},
         {"rc"s, NV_ENC_PARAMS_RC_CBR},
         {"multipass"s, &config::video.nv_legacy.multipass},
         {"spatial-aq"s, &config::video.nv_legacy.spatial_aq},
@@ -808,7 +808,7 @@ namespace video {
         {"surfaces"s, 1},
         {"cbr_padding"s, false},
         {"preset"s, &config::video.nv_legacy.preset},
-        {"tune"s, NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY},
+        {"tune"s, &config::video.nv_legacy.tune},
         {"rc"s, NV_ENC_PARAMS_RC_CBR},
         {"multipass"s, &config::video.nv_legacy.multipass},
         {"spatial-aq"s, &config::video.nv_legacy.spatial_aq},
@@ -835,7 +835,12 @@ namespace video {
         {"surfaces"s, 1},
         {"cbr_padding"s, false},
         {"preset"s, &config::video.nv_legacy.preset},
-        {"tune"s, NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY},
+        // FFmpeg rejects the ultra high quality tuning for H.264, which falls back to high quality tuning
+        {"tune"s, [] {
+           return config::video.nv_legacy.tune == NV_ENC_TUNING_INFO_ULTRA_HIGH_QUALITY ?
+                    static_cast<int>(NV_ENC_TUNING_INFO_HIGH_QUALITY) :
+                    config::video.nv_legacy.tune;
+         }},
         {"rc"s, NV_ENC_PARAMS_RC_CBR},
         {"coder"s, &config::video.nv_legacy.h264_coder},
         {"multipass"s, &config::video.nv_legacy.multipass},
