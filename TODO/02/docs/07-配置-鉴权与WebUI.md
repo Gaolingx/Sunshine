@@ -6,6 +6,8 @@
 > 3. WebUI 的请求是怎么被**鉴权**的（Basic Auth / 来源准入 / CSRF）？
 > 4. WebUI 暴露了哪些**页面与 REST API**，它们各自改动了什么状态？
 
+> 图例见 [README · 图例与阅读约定](./README.md#图例与阅读约定)。
+
 主要源文件：
 
 | 文件 | 职责 |
@@ -28,7 +30,7 @@ Sunshine 只有三处磁盘状态，全部位于 `appdata()` 目录（Windows：
 | 文件 | 变量 | 默认值 | 内容 |
 |------|------|--------|------|
 | `sunshine.conf` | `config::sunshine.config_file` | `appdata()/sunshine.conf` | 用户可编辑的键值配置 |
-| `sunshine_state.json` | `config::nvhttp.file_state` | `"sunshine_state.json"`（[../../../src/config.cpp:854](../../../src/config.cpp:854)） | 已配对客户端证书数据库 + 主机 `uniqueid` |
+| `sunshine_state.json` | `config::nvhttp.file_state` | `"sunshine_state.json"`（[../../../src/config.cpp:854](../../../src/config.cpp#L854)） | 已配对客户端证书数据库 + 主机 `uniqueid` |
 | `display_device.state` | 由 `display_device::init` 管理 | `appdata()/display_device.state` | 显示设备持久化状态 |
 
 `sunshine_state.json` 有**双重身份**：它既是 GameStream 的配对数据库，也是 WebUI 的凭据文件。关联发生在：
@@ -59,7 +61,7 @@ prep-cmd = [
 ]
 ```
 
-解析入口 `config::parse_config`（[../../../src/config.cpp:1040](../../../src/config.cpp:1040)）：
+解析入口 `config::parse_config`（[../../../src/config.cpp:1040](../../../src/config.cpp#L1040)）：
 
 ```cpp
 std::unordered_map<std::string, std::string> parse_config(const std::string_view file_content) {
@@ -92,7 +94,7 @@ std::unordered_map<std::string, std::string> parse_config(const std::string_view
 
 ### 1.3 `apply_config`：消费式解析
 
-`config::apply_config`（[../../../src/config.cpp:1622](../../../src/config.cpp:1622)）是真正的语义层。它接收字符串 map，逐个键用一族模板辅助函数读取，**读到就 `erase`**：
+`config::apply_config`（[../../../src/config.cpp:1622](../../../src/config.cpp#L1622)）是真正的语义层。它接收字符串 map，逐个键用一族模板辅助函数读取，**读到就 `erase`**：
 
 ```
 apply_config(vars)
@@ -114,7 +116,7 @@ apply_config(vars)
           BOOST_LOG(warning) << "Warning: Unrecognized configurable option [" << name << "]";
 ```
 
-`*_f` 族的语义（[../../../src/config.cpp:1092](../../../src/config.cpp:1092) 起）：
+`*_f` 族的语义（[../../../src/config.cpp:1093](../../../src/config.cpp#L1093) 起）：
 
 | 辅助函数 | 行为 |
 |----------|------|
@@ -128,14 +130,14 @@ apply_config(vars)
 
 **「未被任何 `*_f` 消费」= 拼写错误**，会在末尾变成 `Warning: Unrecognized configurable option`。这是排查「我的配置没生效」的第一条线索。
 
-内置的白名单之一 —— `locale`（[../../../src/config.cpp:1916](../../../src/config.cpp:1916)）：
+内置的白名单之一 —— `locale`（[../../../src/config.cpp:1916](../../../src/config.cpp#L1916)）：
 
 ```
 bg, cs, de, en, en_GB, en_US, es, fr, hu, it, ja, ko, pl, pt, pt_BR,
 ru, sv, tr, uk, vi, zh, zh_TW
 ```
 
-`min_log_level` 接受名字或 0–6 数字字符（[../../../src/config.cpp:1940](../../../src/config.cpp:1940)）：
+`min_log_level` 接受名字或 0–6 数字字符（[../../../src/config.cpp:1941](../../../src/config.cpp#L1941)）：
 
 | 名字 | 数值 |
 |------|:----:|
@@ -149,7 +151,7 @@ ru, sv, tr, uk, vi, zh, zh_TW
 
 ### 1.4 命令行覆盖与优先级
 
-`config::parse(argc, argv)`（[../../../src/config.cpp:1996](../../../src/config.cpp:1996)）的完整优先级：
+`config::parse(argc, argv)`（[../../../src/config.cpp:1996](../../../src/config.cpp#L1996)）的完整优先级：
 
 ```
   高  ┌──────────────────────────────────────────────┐
@@ -182,7 +184,7 @@ parse(argc, argv)
 ```
 
 * 命令行参数**后面**可以通过 `--` 之外的裸参数指定配置文件路径；例如 `sunshine.exe C:\my.conf port=48000`。
-* 配置不存在时会**创建一个空文件**（[../../../src/config.cpp:2060](../../../src/config.cpp:2060)），这样首次运行不会报错。
+* 配置不存在时会**创建一个空文件**（[../../../src/config.cpp:2060](../../../src/config.cpp#L2060)），这样首次运行不会报错。
 * 子命令分发在 [../../../src/main.cpp](../../../src/main.cpp) 的 `cmd_to_func`；未知子命令退出码 **7**。
 * 应用失败时（`std::filesystem::filesystem_error` / `boost::filesystem::filesystem_error`）打 fatal `Failed to apply config: ...`；Windows 上非 shortcut 启动还会提示：
 
@@ -194,7 +196,7 @@ parse(argc, argv)
 
 ### 1.5 追加式默认值回写
 
-有些默认值需要在运行时**被写进配置文件**（让用户看得见、可改），但又不能覆盖用户已有的设置。这是 `persist_config_option_if_missing`（[../../../src/config.cpp:1065](../../../src/config.cpp:1065)）的职责：
+有些默认值需要在运行时**被写进配置文件**（让用户看得见、可改），但又不能覆盖用户已有的设置。这是 `persist_config_option_if_missing`（[../../../src/config.cpp:1065](../../../src/config.cpp#L1065)）的职责：
 
 ```
 persist_config_option_if_missing(name, value)
@@ -222,22 +224,22 @@ bool select_all_gamepad_drivers_if_licensed(const bool virtualhid_licensed) {
 }
 ```
 
-对应键常量：`GAMEPAD_DRIVER_ALL = "all"`、`GAMEPAD_DRIVER_VIRTUALHID = "virtualhid"`、`GAMEPAD_DRIVER_VIGEMBUS = "vigembus"`（[../../../src/config.h:49](../../../src/config.h:49)）。
+对应键常量：`GAMEPAD_DRIVER_ALL = "all"`、`GAMEPAD_DRIVER_VIRTUALHID = "virtualhid"`、`GAMEPAD_DRIVER_VIGEMBUS = "vigembus"`（[../../../src/config.h:49](../../../src/config.h#L49)）。
 
 ### 1.6 日志与脱敏
 
-`log_config_settings(vars, save)`（[../../../src/config.cpp:1605](../../../src/config.cpp:1605)）在 `apply_config` 最开头执行，逐条打印：
+`log_config_settings(vars, save)`（[../../../src/config.cpp:1605](../../../src/config.cpp#L1605)）在 `apply_config` 最开头执行，逐条打印：
 
 ```
 config: '<name>' = <val>
 ```
 
-* 键名命中 `config::redacted_config` 时值被替换为 `[redacted]`。当前唯一的脱敏键是 `csrf_allowed_origins`（[../../../src/config.h:60](../../../src/config.h:60)）。
-* `save == true` 时同时收集到 `config::modified_config_settings`（[../../../src/config.h:54](../../../src/config.h:54)）—— 这份集合供 WebUI/诊断页展示「本次启动实际生效的配置」。
+* 键名命中 `config::redacted_config` 时值被替换为 `[redacted]`。当前唯一的脱敏键是 `csrf_allowed_origins`（[../../../src/config.h:55](../../../src/config.h#L55)）。
+* `save == true` 时同时收集到 `config::modified_config_settings`（[../../../src/config.h:49](../../../src/config.h#L49)）—— 这份集合供 WebUI/诊断页展示「本次启动实际生效的配置」。
 
 ### 1.7 配置键总览（按结构体分组）
 
-#### `sunshine_t`（[../../../src/config.h:374](../../../src/config.h:374)）
+#### `sunshine_t`（[../../../src/config.h:375](../../../src/config.h#L375)）
 
 | 键 | 类型 | 说明 |
 |----|------|------|
@@ -254,7 +256,7 @@ config: '<name>' = <val>
 | `prep-cmd` | 列表 | 启动/结束前后执行的命令 |
 | `csrf_allowed_origins` | 列表 | 允许跨源提交的 Origin 白名单（脱敏） |
 
-`flags` 枚举（[../../../src/config.h:325](../../../src/config.h:325)）：
+`flags` 枚举（[../../../src/config.h:325](../../../src/config.h#L325)）：
 
 | 名字 | 值 | 含义 |
 |------|:--:|------|
@@ -264,9 +266,9 @@ config: '<name>' = <val>
 | `UPNP` | 3 | 启用 UPnP 端口映射 |
 | `CONST_PIN` | 4 | 固定 PIN，便于自动化测试 |
 
-`prep_cmd_t`（[../../../src/config.h:337](../../../src/config.h:337)）字段为 `do_cmd` / `undo_cmd` / `elevated`：启动应用前执行 `do_cmd`，退出后执行 `undo_cmd`；`elevated` 决定是否需要提权。
+`prep_cmd_t`（[../../../src/config.h:342](../../../src/config.h#L342)）字段为 `do_cmd` / `undo_cmd` / `elevated`：启动应用前执行 `do_cmd`，退出后执行 `undo_cmd`；`elevated` 决定是否需要提权。
 
-#### `stream_t`（[../../../src/config.h:262](../../../src/config.h:262)）
+#### `stream_t`（[../../../src/config.h:264](../../../src/config.h#L264)）
 
 | 键 | 默认值 | 说明 |
 |----|:------:|------|
@@ -277,7 +279,7 @@ config: '<name>' = <val>
 | `wan_encryption_mode` | `1` | 广域网加密策略 |
 | `packetsize` | `0`（范围 0–65535） | 0 = 自动；`PACKETSIZE_SMALL=500` / `PACKETSIZE_LARGE=1456` |
 
-加密模式常量（[../../../src/config.h:248](../../../src/config.h:248)）：
+加密模式常量（[../../../src/config.h:251](../../../src/config.h#L251)）：
 
 | 常量 | 值 | 语义 |
 |------|:--:|------|
@@ -285,7 +287,7 @@ config: '<name>' = <val>
 | `ENCRYPTION_MODE_OPPORTUNISTIC` | 1 | 客户端支持就加密 |
 | `ENCRYPTION_MODE_MANDATORY` | 2 | 不满足即拒绝（RTSP `cmd_announce` 返回 403） |
 
-#### `nvhttp_t`（[../../../src/config.h:281](../../../src/config.h:281)）
+#### `nvhttp_t`（[../../../src/config.h:282](../../../src/config.h#L282)）
 
 | 键 | 默认值 | 说明 |
 |----|:------:|------|
@@ -296,7 +298,7 @@ config: '<name>' = <val>
 | `file_state` | `sunshine_state.json` | 配对数据库 + 凭据 |
 | `external_ip` | 空 | `/serverinfo` 回填的 `ExternalIP` |
 
-#### `input_t`（[../../../src/config.h:297](../../../src/config.h:297)）
+#### `input_t`（[../../../src/config.h:300](../../../src/config.h#L300)）
 
 | 键 | 默认值 | 说明 |
 |----|:------:|------|
@@ -315,11 +317,11 @@ config: '<name>' = <val>
 | `high_resolution_scrolling` | 平台默认 | 高分辨率滚轮 |
 | `native_pen_touch` | 平台默认 | 原生笔/触摸 |
 
-默认 `keybindings`（[../../../src/config.cpp:863](../../../src/config.cpp:863)）为 `{SHIFT→LSHIFT, CTRL→LCTRL, ALT→LALT}` 三对。
+默认 `keybindings`（[../../../src/config.cpp:863](../../../src/config.cpp#L863)）为 `{SHIFT→LSHIFT, CTRL→LCTRL, ALT→LALT}` 三对。
 
 #### `video_t` / `audio_t`
 
-`video_t`（[../../../src/config.h:71](../../../src/config.h:71)）与 `audio_t`（[../../../src/config.h:239](../../../src/config.h:239)）的键极多，分别在 [04](./04-码率控制与QoS.md) §4 与 [06](./06-采集与编码.md) 中按功能列出。这里只给出**解析命名空间与起始行**，便于定位：
+`video_t`（[../../../src/config.h:70](../../../src/config.h#L70)）与 `audio_t`（[../../../src/config.h:241](../../../src/config.h#L241)）的键极多，分别在 [04](./04-码率控制与QoS.md) §4 与 [06](./06-采集与编码.md) 中按功能列出。这里只给出**解析命名空间与起始行**，便于定位：
 
 | 子命名空间 | `config.cpp` 起始行 | 覆盖内容 |
 |------------|:------------------:|----------|
@@ -339,9 +341,9 @@ config: '<name>' = <val>
 
 | 位置 | FRESH_STATE 行为 |
 |------|------------------|
-| `http::init`（[../../../src/httpcommon.cpp:55](../../../src/httpcommon.cpp:55)） | 生成新 `http::unique_id`，证书与私钥改指向 `temp_directory_path()/"Sunshine"/cert-<id>` 与 `pkey-<id>` |
-| `nvhttp::start`（[../../../src/nvhttp.cpp:1604](../../../src/nvhttp.cpp:1604)） | 跳过 `load_state()`，即不读 `sunshine_state.json` |
-| `add_authorized_client`（[../../../src/nvhttp.cpp:441](../../../src/nvhttp.cpp:441)） | 新配对客户端**不写盘** |
+| `http::init`（[../../../src/httpcommon.cpp:55](../../../src/httpcommon.cpp#L55)） | 生成新 `http::unique_id`，证书与私钥改指向 `temp_directory_path()/"Sunshine"/cert-<id>` 与 `pkey-<id>` |
+| `nvhttp::start`（[../../../src/nvhttp.cpp:1604](../../../src/nvhttp.cpp#L1604)） | 跳过 `load_state()`，即不读 `sunshine_state.json` |
+| `add_authorized_client`（[../../../src/nvhttp.cpp:441](../../../src/nvhttp.cpp#L441)） | 新配对客户端**不写盘** |
 | `http::save_user_creds` | 写入临时路径下的凭据文件 |
 
 用途：CI 测试、多实例并行、一次性调试会话。
@@ -354,7 +356,7 @@ config: '<name>' = <val>
 #endif
 ```
 
-（[../../../src/config.h:429](../../../src/config.h:429)、[../../../src/config.cpp:1988](../../../src/config.cpp:1988)）等价于 `apply_config(parse_config(file_content))`，让单元测试跳过文件系统直接验证解析语义。
+（[../../../src/config.h:423](../../../src/config.h#L423)、[../../../src/config.cpp:1988](../../../src/config.cpp#L1988)）等价于 `apply_config(parse_config(file_content))`，让单元测试跳过文件系统直接验证解析语义。
 
 ---
 
@@ -362,7 +364,7 @@ config: '<name>' = <val>
 
 ### 2.1 `http::init`：证书生命周期
 
-`http::init`（[../../../src/httpcommon.cpp:55](../../../src/httpcommon.cpp:55)）在 `main()` 的**致命初始化阶段**执行（失败即 `return -1`）：
+`http::init`（[../../../src/httpcommon.cpp:55](../../../src/httpcommon.cpp#L55)）在 `main()` 的**致命初始化阶段**执行（失败即 `return -1`）：
 
 ```
 http::init()
@@ -405,7 +407,7 @@ http::init()
 }
 ```
 
-`save_user_creds(file, username, password, run_our_mouth)`（[../../../src/httpcommon.cpp:88](../../../src/httpcommon.cpp:88)）：
+`save_user_creds(file, username, password, run_our_mouth)`（[../../../src/httpcommon.cpp:86](../../../src/httpcommon.cpp#L86)）：
 
 ```
 save_user_creds()
@@ -423,16 +425,16 @@ save_user_creds()
 
 | 函数 | 行号 | 行为 |
 |------|------|------|
-| `save_user_creds` | [88](../../../src/httpcommon.cpp:88) | 加盐哈希并写盘 |
-| `user_creds_exist` | [115](../../../src/httpcommon.cpp:115) | JSON 中 `username`/`password`/`salt` **三个键都要有**才算存在 |
-| `reload_user_creds` | [135](../../../src/httpcommon.cpp:135) | 把三者装入 `config::sunshine.{username,password,salt}` |
-| `create_creds` | [151](../../../src/httpcommon.cpp:151) | 生成 TLS cert/pkey（与用户密码无关） |
+| `save_user_creds` | [86](../../../src/httpcommon.cpp#L86) | 加盐哈希并写盘 |
+| `user_creds_exist` | [116](../../../src/httpcommon.cpp#L116) | JSON 中 `username`/`password`/`salt` **三个键都要有**才算存在 |
+| `reload_user_creds` | [137](../../../src/httpcommon.cpp#L137) | 把三者装入 `config::sunshine.{username,password,salt}` |
+| `create_creds` | [154](../../../src/httpcommon.cpp#L154) | 生成 TLS cert/pkey（与用户密码无关） |
 
 **关键设计：服务端不存明文密码，也不存 `hash(密码)`，而是存 `hash(密码 + 盐)`。** 验证时现场重算。因此 `sunshine_state.json` 被读走也不等于密码泄露（但仍应保护，因为配对证书在里面）。
 
 ### 2.3 验证逻辑
 
-`authenticate`（[../../../src/confighttp.cpp:595](../../../src/confighttp.cpp:595)）的判定顺序：
+`authenticate`（[../../../src/confighttp.cpp:595](../../../src/confighttp.cpp#L595)）的判定顺序：
 
 ```
 authenticate(response, request)
@@ -470,7 +472,7 @@ WWW-Authenticate: Basic realm="Sunshine Gamestream Host", charset="UTF-8"
 
 ### 2.4 统一安全响应头
 
-所有由 `send_response`（[../../../src/confighttp.cpp:538](../../../src/confighttp.cpp:538)）产出的 JSON 响应都固定携带：
+所有由 `send_response`（[../../../src/confighttp.cpp:538](../../../src/confighttp.cpp#L538)）产出的 JSON 响应都固定携带：
 
 ```
 Content-Type: application/json
@@ -482,7 +484,7 @@ Content-Security-Policy: frame-ancestors 'none';
 
 ### 2.5 `check_content_type`
 
-所有 POST/DELETE 端点第一步都调用（[../../../src/confighttp.cpp:684](../../../src/confighttp.cpp:684)）：
+所有 POST/DELETE 端点第一步都调用（[../../../src/confighttp.cpp:684](../../../src/confighttp.cpp#L684)）：
 
 ```
 check_content_type(response, request, "application/json")
@@ -512,7 +514,7 @@ constexpr auto CSRF_TOKEN_LIFETIME = std::chrono::hours(1);     // 有效期 1 �
 
 ### 3.2 客户端标识
 
-`get_client_id(request)`（[../../../src/confighttp.cpp:715](../../../src/confighttp.cpp:715)）：
+`get_client_id(request)`（[../../../src/confighttp.cpp:715](../../../src/confighttp.cpp#L715)）：
 
 ```
 ① 若 Authorization: Basic 能解码出用户名 → 用用户名
@@ -523,7 +525,7 @@ constexpr auto CSRF_TOKEN_LIFETIME = std::chrono::hours(1);     // 有效期 1 �
 
 ### 3.3 生成
 
-`generate_csrf_token(client_id)`（[../../../src/confighttp.cpp:735](../../../src/confighttp.cpp:735)）：
+`generate_csrf_token(client_id)`（[../../../src/confighttp.cpp:735](../../../src/confighttp.cpp#L735)）：
 
 ```
 generate_csrf_token(client_id)
@@ -538,7 +540,7 @@ generate_csrf_token(client_id)
 
 ### 3.4 校验：三分支决策树
 
-`validate_csrf_token`（[../../../src/confighttp.cpp:796](../../../src/confighttp.cpp:796)）：
+`validate_csrf_token`（[../../../src/confighttp.cpp:796](../../../src/confighttp.cpp#L796)）：
 
 ```
 validate_csrf_token(response, request, client_id)
@@ -561,7 +563,7 @@ validate_csrf_token(response, request, client_id)
        └─ 有 → validate_stored_csrf_token
 ```
 
-`validate_stored_csrf_token`（[../../../src/confighttp.cpp:764](../../../src/confighttp.cpp:764)）：
+`validate_stored_csrf_token`（[../../../src/confighttp.cpp:764](../../../src/confighttp.cpp#L764)）：
 
 | 情况 | 日志 | 响应 |
 |------|------|------|
@@ -609,7 +611,7 @@ validate_csrf_token(response, request, client_id)
 | `^/troubleshooting/?$` | `troubleshooting.html` | 诊断页 |
 | `^/welcome/?$` | `welcome.html` | `require_auth = false`、`redirect_if_username = true` |
 
-`page_handler(file, require_auth, redirect_if_username)` 是生成这些处理器的工厂 lambda。`getPage`（[../../../src/confighttp.cpp:882](../../../src/confighttp.cpp:882)）第一件事就是：
+`page_handler(file, require_auth, redirect_if_username)` 是生成这些处理器的工厂 lambda。`getPage`（[../../../src/confighttp.cpp:882](../../../src/confighttp.cpp#L882)）第一件事就是：
 
 ```cpp
 if (redirect_if_username && !config::sunshine.username.empty()) {
@@ -624,34 +626,34 @@ if (redirect_if_username && !config::sunshine.username.empty()) {
 
 | 方法 | 路径 | 处理函数（行号） | 作用 |
 |:----:|------|-----------------|------|
-| GET | `/api/browse` | `browseDirectory`（[2234](../../../src/confighttp.cpp:2234)） | 目录浏览（选可执行文件）；有穿越防护 |
-| GET | `/api/apps` | `getApps`（[1025](../../../src/confighttp.cpp:1025)） | 应用列表（含 `index`、`file-path` 检查） |
-| POST | `/api/apps` | `saveApp`（[1110](../../../src/confighttp.cpp:1110)） | 新增应用 |
-| DELETE | `/api/apps/([0-9]+)` | `deleteApp`（[1211](../../../src/confighttp.cpp:1211)） | 删除指定下标应用 |
-| POST | `/api/apps/close` | `closeApp`（[1185](../../../src/confighttp.cpp:1185)） | 关闭当前运行的应用 |
-| GET | `/api/clients/list` | `getClients`（[1262](../../../src/confighttp.cpp:1262)） | 已配对客户端列表 |
-| POST | `/api/clients/unpair` | `unpair`（[1345](../../../src/confighttp.cpp:1345)） | 解除单个客户端绑定 |
-| POST | `/api/clients/unpair-all` | `unpairAll`（[1389](../../../src/confighttp.cpp:1389)） | 清空全部绑定 |
-| POST | `/api/clients/update` | `updateClient`（[1291](../../../src/confighttp.cpp:1291)） | 改名 / 启用停用 |
-| GET | `/api/config` | `getConfig`（[1416](../../../src/confighttp.cpp:1416)） | 读取原始配置键值 |
-| POST | `/api/config` | `saveConfig`（[1470](../../../src/confighttp.cpp:1470)） | **整文件重写**配置 |
-| GET | `/api/configLocale` | `getLocale`（[1444](../../../src/confighttp.cpp:1444)） | 仅返回 `locale`（**不需鉴权**） |
-| GET | `/api/covers/([0-9]+)` | `getCover`（[1519](../../../src/confighttp.cpp:1519)） | 取应用封面 |
-| POST | `/api/covers/upload` | `uploadCover`（[1589](../../../src/confighttp.cpp:1589)） | 上传封面 |
-| GET | `/api/csrf-token` | `getCSRFToken`（[1003](../../../src/confighttp.cpp:1003)） | 领取 CSRF token |
-| POST | `/api/password` | `savePassword`（[1677](../../../src/confighttp.cpp:1677)） | 改用户名/密码 |
-| GET | `/api/pin` | `getPendingPairings`（[1746](../../../src/confighttp.cpp:1746)） | 待审批配对的客户端列表 |
-| POST | `/api/pin` | `savePin`（[1827](../../../src/confighttp.cpp:1827)） | 提交 PIN 完成配对 |
-| DELETE | `/api/pin` | `cancelPairing`（[1776](../../../src/confighttp.cpp:1776)） | 取消某次待审批配对 |
-| GET | `/api/logs` | `getLogs`（[1645](../../../src/confighttp.cpp:1645)） | 下载日志文件 |
-| POST | `/api/reset-display-device-persistence` | `resetDisplayDevicePersistence`（[1878](../../../src/confighttp.cpp:1878)） | 清除显示设备持久化 |
-| POST | `/api/reset-portal-token` | `resetPortalToken`（[1904](../../../src/confighttp.cpp:1904)） | 删除 XDG Portal restore token |
-| POST | `/api/restart` | `restart`（[1939](../../../src/confighttp.cpp:1939)） | `platf::restart()`，可能不返回 |
-| GET | `/api/virtual-input/license` | `getVirtualInputLicense`（[2053](../../../src/confighttp.cpp:2053)） | libvirtualhid 许可证状态 |
-| POST | `/api/virtual-input/license` | `updateVirtualInputLicense`（[2069](../../../src/confighttp.cpp:2069)） | 更新许可证 |
-| GET | `/api/virtual-input/status` | `getVirtualInputStatus`（[2032](../../../src/confighttp.cpp:2032)） | 驱动版本与后端状态 |
+| GET | `/api/browse` | `browseDirectory`（[2234](../../../src/confighttp.cpp#L2234)） | 目录浏览（选可执行文件）；有穿越防护 |
+| GET | `/api/apps` | `getApps`（[1025](../../../src/confighttp.cpp#L1025)） | 应用列表（含 `index`、`file-path` 检查） |
+| POST | `/api/apps` | `saveApp`（[1110](../../../src/confighttp.cpp#L1110)） | 新增应用 |
+| DELETE | `/api/apps/([0-9]+)` | `deleteApp`（[1211](../../../src/confighttp.cpp#L1211)） | 删除指定下标应用 |
+| POST | `/api/apps/close` | `closeApp`（[1185](../../../src/confighttp.cpp#L1185)） | 关闭当前运行的应用 |
+| GET | `/api/clients/list` | `getClients`（[1262](../../../src/confighttp.cpp#L1262)） | 已配对客户端列表 |
+| POST | `/api/clients/unpair` | `unpair`（[1345](../../../src/confighttp.cpp#L1345)） | 解除单个客户端绑定 |
+| POST | `/api/clients/unpair-all` | `unpairAll`（[1389](../../../src/confighttp.cpp#L1389)） | 清空全部绑定 |
+| POST | `/api/clients/update` | `updateClient`（[1291](../../../src/confighttp.cpp#L1291)） | 改名 / 启用停用 |
+| GET | `/api/config` | `getConfig`（[1416](../../../src/confighttp.cpp#L1416)） | 读取原始配置键值 |
+| POST | `/api/config` | `saveConfig`（[1470](../../../src/confighttp.cpp#L1470)） | **整文件重写**配置 |
+| GET | `/api/configLocale` | `getLocale`（[1444](../../../src/confighttp.cpp#L1444)） | 仅返回 `locale`（**不需鉴权**） |
+| GET | `/api/covers/([0-9]+)` | `getCover`（[1519](../../../src/confighttp.cpp#L1519)） | 取应用封面 |
+| POST | `/api/covers/upload` | `uploadCover`（[1589](../../../src/confighttp.cpp#L1589)） | 上传封面 |
+| GET | `/api/csrf-token` | `getCSRFToken`（[1003](../../../src/confighttp.cpp#L1003)） | 领取 CSRF token |
+| POST | `/api/password` | `savePassword`（[1677](../../../src/confighttp.cpp#L1677)） | 改用户名/密码 |
+| GET | `/api/pin` | `getPendingPairings`（[1746](../../../src/confighttp.cpp#L1746)） | 待审批配对的客户端列表 |
+| POST | `/api/pin` | `savePin`（[1827](../../../src/confighttp.cpp#L1827)） | 提交 PIN 完成配对 |
+| DELETE | `/api/pin` | `cancelPairing`（[1776](../../../src/confighttp.cpp#L1776)） | 取消某次待审批配对 |
+| GET | `/api/logs` | `getLogs`（[1645](../../../src/confighttp.cpp#L1645)） | 下载日志文件 |
+| POST | `/api/reset-display-device-persistence` | `resetDisplayDevicePersistence`（[1878](../../../src/confighttp.cpp#L1878)） | 清除显示设备持久化 |
+| POST | `/api/reset-portal-token` | `resetPortalToken`（[1904](../../../src/confighttp.cpp#L1904)） | 删除 XDG Portal restore token |
+| POST | `/api/restart` | `restart`（[1939](../../../src/confighttp.cpp#L1939)） | `platf::restart()`，可能不返回 |
+| GET | `/api/virtual-input/license` | `getVirtualInputLicense`（[2053](../../../src/confighttp.cpp#L2053)） | libvirtualhid 许可证状态 |
+| POST | `/api/virtual-input/license` | `updateVirtualInputLicense`（[2069](../../../src/confighttp.cpp#L2069)） | 更新许可证 |
+| GET | `/api/virtual-input/status` | `getVirtualInputStatus`（[2032](../../../src/confighttp.cpp#L2032)） | 驱动版本与后端状态 |
 
-**默认处理器策略**（[../../../src/confighttp.cpp:2338](../../../src/confighttp.cpp:2338) 附近）：
+**默认处理器策略**（[../../../src/confighttp.cpp:2338](../../../src/confighttp.cpp#L2338) 附近）：
 
 | 方法 | 未匹配路径的响应 |
 |:----:|-----------------|
@@ -662,9 +664,9 @@ if (redirect_if_username && !config::sunshine.username.empty()) {
 
 | 正则 | 文件 |
 |------|------|
-| `^/images/sunshine.ico$` | 图标（`getFaviconImage`，[913](../../../src/confighttp.cpp:913)） |
-| `^/images/logo-sunshine-45.png$` | Logo（`getSunshineLogoImage`，[931](../../../src/confighttp.cpp:931)） |
-| `^/assets\/.+$` | 前端打包产物（`getAsset`，[958](../../../src/confighttp.cpp:958)） |
+| `^/images/sunshine.ico$` | 图标（`getFaviconImage`，[913](../../../src/confighttp.cpp#L913)） |
+| `^/images/logo-sunshine-45.png$` | Logo（`getSunshineLogoImage`，[931](../../../src/confighttp.cpp#L931)） |
+| `^/assets\/.+$` | 前端打包产物（`getAsset`，[958](../../../src/confighttp.cpp#L958)） |
 
 `getAsset` 的防护链：
 
@@ -680,11 +682,11 @@ if (redirect_if_username && !config::sunshine.username.empty()) {
 5. 写出，Content-Type = 查表结果
 ```
 
-`/api/browse` 同样有 `is_browsable_executable`（[2129](../../../src/confighttp.cpp:2129)）做白名单校验，避免 WebUI 变成一个任意文件读取器。
+`/api/browse` 同样有 `is_browsable_executable`（[2129](../../../src/confighttp.cpp#L2129)）做白名单校验，避免 WebUI 变成一个任意文件读取器。
 
 ### 4.4 服务器启动
 
-`confighttp::start()`（[../../../src/confighttp.cpp:2313](../../../src/confighttp.cpp:2313)）：
+`confighttp::start()`（[../../../src/confighttp.cpp:2313](../../../src/confighttp.cpp#L2313)）：
 
 * 线程名 `confighttp`，accept 线程名 `confighttp::tcp`。
 * `https_server_t server {config::nvhttp.cert, config::nvhttp.pkey}` —— 复用 GameStream 的同一份 TLS 凭据。
@@ -701,7 +703,7 @@ if (redirect_if_username && !config::sunshine.username.empty()) {
 
 ### 5.1 `/api/config`
 
-**GET**（[../../../src/confighttp.cpp:1416](../../../src/confighttp.cpp:1416)）：重新读盘，返回**文件里的原始键值**，不做类型转换。
+**GET**（[../../../src/confighttp.cpp:1416](../../../src/confighttp.cpp#L1416)）：重新读盘，返回**文件里的原始键值**，不做类型转换。
 
 ```json
 {
@@ -715,7 +717,7 @@ if (redirect_if_username && !config::sunshine.username.empty()) {
 
 注意所有值都是**字符串**——因为返回的就是 `parse_config` 的 `unordered_map<string,string>`。这意味着前端拿到的是「写进文件的字面量」，而不是「运行时的有效值」。
 
-**POST**（[../../../src/confighttp.cpp:1470](../../../src/confighttp.cpp:1470)）：这是唯一会**整文件重写** `sunshine.conf` 的端点。
+**POST**（[../../../src/confighttp.cpp:1470](../../../src/confighttp.cpp#L1470)）：这是唯一会**整文件重写** `sunshine.conf` 的端点。
 
 ```
 saveConfig()
@@ -739,7 +741,7 @@ saveConfig()
 
 ### 5.2 `/api/password`
 
-（[../../../src/confighttp.cpp:1677](../../../src/confighttp.cpp:1677)）请求体：
+（[../../../src/confighttp.cpp:1677](../../../src/confighttp.cpp#L1677)）请求体：
 
 ```json
 {
@@ -791,12 +793,12 @@ std::mutex &map_id_sess_mutex();
 | 常量/校验 | 值 |
 |-----------|-----|
 | `PAIRING_ID_SIZE` | 32 个**十六进制**字符 |
-| PIN 格式 | 恰好 **4 位数字**（`is_valid_pairing_pin`，[../../../src/nvhttp.cpp:625](../../../src/nvhttp.cpp:625)） |
-| 客户端名 | 1 – `MAX_PAIRING_CLIENT_NAME_SIZE` 字节（`is_valid_pairing_name`，[631](../../../src/nvhttp.cpp:631)） |
+| PIN 格式 | 恰好 **4 位数字**（`is_valid_pairing_pin`，[../../../src/nvhttp.cpp:625](../../../src/nvhttp.cpp#L625)） |
+| 客户端名 | 1 – `MAX_PAIRING_CLIENT_NAME_SIZE` 字节（`is_valid_pairing_name`，[631](../../../src/nvhttp.cpp#L631)） |
 | 未审批会话上限 | `MAX_PENDING_PAIRING_SESSIONS`，超限返回 **503** |
 | 会话超时 | `PAIRING_SESSION_TIMEOUT`，超时以 **408 "Pairing session expired"** 回应客户端 |
 
-`insert_pair_session`（[../../../src/nvhttp.cpp](../../../src/nvhttp.cpp:594) 附近）返回三态：
+`insert_pair_session`（[../../../src/nvhttp.cpp](../../../src/nvhttp.cpp#L594) 附近）返回三态：
 
 | 结果 | HTTP 状态 | 消息 |
 |:----:|:---------:|------|
@@ -806,7 +808,7 @@ std::mutex &map_id_sess_mutex();
 
 #### GET `/api/pin`
 
-`getPendingPairings`（[../../../src/confighttp.cpp:1746](../../../src/confighttp.cpp:1746)）调 `nvhttp::get_pending_pairings()`（[../../../src/nvhttp.cpp:635](../../../src/nvhttp.cpp:635)）：
+`getPendingPairings`（[../../../src/confighttp.cpp:1746](../../../src/confighttp.cpp#L1746)）调 `nvhttp::get_pending_pairings()`（[../../../src/nvhttp.cpp:635](../../../src/nvhttp.cpp#L635)）：
 
 ```
 get_pending_pairings()
@@ -824,7 +826,7 @@ get_pending_pairings()
 
 #### POST `/api/pin`
 
-`savePin`（[../../../src/confighttp.cpp:1827](../../../src/confighttp.cpp:1827)）先做三层格式校验，随后调 `nvhttp::pin(pairing_id, pin, name)`（[../../../src/nvhttp.cpp:1107](../../../src/nvhttp.cpp:1107)）并返回 `{"status": <bool>}`。
+`savePin`（[../../../src/confighttp.cpp:1827](../../../src/confighttp.cpp#L1827)）先做三层格式校验，随后调 `nvhttp::pin(pairing_id, pin, name)`（[../../../src/nvhttp.cpp:1107](../../../src/nvhttp.cpp#L1107)）并返回 `{"status": <bool>}`。
 
 `nvhttp::pin` 内部：
 
@@ -843,13 +845,13 @@ pin(pairing_id, pin, name)
        └─ 返回结果
 ```
 
-即：**`POST /api/pin` 是一个同步阻塞的长请求**，最长挂 `ping_timeout`（默认 10 秒）。这正是 nvhttp.cpp 里 `write_pairing_response`（[536](../../../src/nvhttp.cpp:536)）要检查 `response.has_left()/has_right()` 的原因——客户端（Moonlight）那边的 `GET /pair?phrase=getservercert` 连接一直在等，PIN 一提交就要立刻把 XML 写回去并 `close_connection_after_response = true`。
+即：**`POST /api/pin` 是一个同步阻塞的长请求**，最长挂 `ping_timeout`（默认 10 秒）。这正是 nvhttp.cpp 里 `write_pairing_response`（[536](../../../src/nvhttp.cpp#L536)）要检查 `response.has_left()/has_right()` 的原因——客户端（Moonlight）那边的 `GET /pair?phrase=getservercert` 连接一直在等，PIN 一提交就要立刻把 XML 写回去并 `close_connection_after_response = true`。
 
-> 冷知识：若启动时带了 `flags = PIN_STDIN`（`config::sunshine.flags[config::flag::PIN_STDIN]`），`start_pairing_session`（[../../../src/nvhttp.cpp:967](../../../src/nvhttp.cpp:967)）不会保存 response，而是打印 `Please insert pin: ` 并从 `std::cin` 读——这就是无头服务器的配对方式。此时 WebUI 的 `/api/pin` 列表仍会显示该会话。
+> 冷知识：若启动时带了 `flags = PIN_STDIN`（`config::sunshine.flags[config::flag::PIN_STDIN]`），`start_pairing_session`（[../../../src/nvhttp.cpp:967](../../../src/nvhttp.cpp#L967)）不会保存 response，而是打印 `Please insert pin: ` 并从 `std::cin` 读——这就是无头服务器的配对方式。此时 WebUI 的 `/api/pin` 列表仍会显示该会话。
 
 #### DELETE `/api/pin`
 
-`cancelPairing`（[../../../src/confighttp.cpp:1776](../../../src/confighttp.cpp:1776)）→ `nvhttp::cancel_pairing`（[../../../src/nvhttp.cpp:667](../../../src/nvhttp.cpp:667)）：
+`cancelPairing`（[../../../src/confighttp.cpp:1776](../../../src/confighttp.cpp#L1776)）→ `nvhttp::cancel_pairing`（[../../../src/nvhttp.cpp:667](../../../src/nvhttp.cpp#L667)）：
 
 ```
 cancel_pairing(pairing_id)
@@ -861,11 +863,11 @@ cancel_pairing(pairing_id)
   └─ map_id_sess.erase(it) → true
 ```
 
-注意超时清理 `expire_pair_sessions_unlocked`（[577](../../../src/nvhttp.cpp:577)）写回的是 **408 "Pairing session expired"**，与手动取消的 400 区分开。
+注意超时清理 `expire_pair_sessions_unlocked`（[577](../../../src/nvhttp.cpp#L577)）写回的是 **408 "Pairing session expired"**，与手动取消的 400 区分开。
 
 ### 5.4 `/api/clients/*`
 
-底层是 `nvhttp.cpp` 里的 `client_root`（`client_t`，[../../../src/nvhttp.cpp:181](../../../src/nvhttp.cpp:181)）：
+底层是 `nvhttp.cpp` 里的 `client_root`（`client_t`，[../../../src/nvhttp.cpp:181](../../../src/nvhttp.cpp#L181)）：
 
 ```cpp
 struct named_cert_t {
@@ -882,14 +884,14 @@ struct client_t {
 
 | 操作 | 函数 | 行号 |
 |------|------|------|
-| 列出 | `get_all_clients` | [1262](../../../src/nvhttp.cpp:1262) |
-| 增 | `add_authorized_client` | [441](../../../src/nvhttp.cpp:441) |
-| 删单个 | `unpair_client` | [1756](../../../src/nvhttp.cpp:1756) |
-| 全清 | `erase_all_clients` | [1749](../../../src/nvhttp.cpp:1749) |
-| 启/停 | `set_client_enabled` | [1773](../../../src/nvhttp.cpp:1773) |
-| 取证书 | `get_cert_by_uuid` | [1789](../../../src/nvhttp.cpp:1789) |
+| 列出 | `get_all_clients` | [1276](../../../src/nvhttp.cpp#L1276) |
+| 增 | `add_authorized_client` | [441](../../../src/nvhttp.cpp#L441) |
+| 删单个 | `unpair_client` | [1756](../../../src/nvhttp.cpp#L1756) |
+| 全清 | `erase_all_clients` | [1749](../../../src/nvhttp.cpp#L1749) |
+| 启/停 | `set_client_enabled` | [1773](../../../src/nvhttp.cpp#L1773) |
+| 取证书 | `get_cert_by_uuid` | [1789](../../../src/nvhttp.cpp#L1789) |
 
-**写入后必然重建信任链**：`rebuild_client_cert_chain()`（[310](../../../src/nvhttp.cpp:310)）清空 `cert_chain` 后，只把 `enabled == true` 的条目 `cert_chain.add(...)` 进去。因此「停用」不是打标记，而是**把它从 TLS 信任链里摘掉**，握手阶段就会被拒。
+**写入后必然重建信任链**：`rebuild_client_cert_chain()`（[310](../../../src/nvhttp.cpp#L310)）清空 `cert_chain` 后，只把 `enabled == true` 的条目 `cert_chain.add(...)` 进去。因此「停用」不是打标记，而是**把它从 TLS 信任链里摘掉**，握手阶段就会被拒。
 
 配套的校验：
 
@@ -903,7 +905,7 @@ verify_client_certificate(X509*)
        └─ 唯一匹配且 enabled → true
 ```
 
-`load_state`/`save_state`（[366](../../../src/nvhttp.cpp:366) / [257](../../../src/nvhttp.cpp:257)）负责与 `sunshine_state.json` 互转，并保留了**旧格式迁移**路径（`root.devices[].certs[]` → `named_cert_t`，uuid 现场生成）。
+`load_state`/`save_state`（[366](../../../src/nvhttp.cpp#L366) / [257](../../../src/nvhttp.cpp#L257)）负责与 `sunshine_state.json` 互转，并保留了**旧格式迁移**路径（`root.devices[].certs[]` → `named_cert_t`，uuid 现场生成）。
 
 `unpairAll` 与 `unpair` 在 [../../../src/confighttp.cpp](../../../src/confighttp.cpp) 中的签名是 `(resp_https_t &, req_https_t &)`（非 const 引用，本 fork 为便于测试注入而调整）。
 
@@ -911,14 +913,14 @@ verify_client_certificate(X509*)
 
 应用清单不是存在 `sunshine.conf` 里，而是 `config::stream.file_apps` 指向的 JSON。`getApps`/`saveApp`/`deleteApp`/`closeApp` 围绕这份清单增删改。
 
-* `getApps`（[1025](../../../src/confighttp.cpp:1025)）内部用 `check_app_index`（[858](../../../src/confighttp.cpp:858)）校验下标。
+* `getApps`（[1025](../../../src/confighttp.cpp#L1025)）内部用 `check_app_index`（[858](../../../src/confighttp.cpp#L858)）校验下标。
 * `deleteApp` 的路由带捕获组 `([0-9]+)`，下标非法时不会进入处理函数而是落到默认处理器（400/404）。
 * `closeApp` 走 `proc::` 流程关闭当前应用。
-* `/api/browse`（[2234](../../../src/confighttp.cpp:2234)）用于在 WebUI 里选可执行文件，靠 `is_browsable_executable`（[2129](../../../src/confighttp.cpp:2129)）过滤。
+* `/api/browse`（[2234](../../../src/confighttp.cpp#L2234)）用于在 WebUI 里选可执行文件，靠 `is_browsable_executable`（[2129](../../../src/confighttp.cpp#L2129)）过滤。
 
 ### 5.6 `/api/covers/upload`
 
-`uploadCover`（[1589](../../../src/confighttp.cpp:1589)）配合 `getCover`（[1519](../../../src/confighttp.cpp:1519)）实现封面图管理：
+`uploadCover`（[1589](../../../src/confighttp.cpp#L1589)）配合 `getCover`（[1519](../../../src/confighttp.cpp#L1519)）实现封面图管理：
 
 * `GET /api/covers/<index>` 按应用下标取图。
 * `POST /api/covers/upload` 上传，落盘路径由应用标识推导；请求体是 multipart 还是原始字节由前端约定。
@@ -927,30 +929,30 @@ verify_client_certificate(X509*)
 
 | 端点 | 函数 | 行为 |
 |------|------|------|
-| `POST /api/restart` | `restart`（[1939](../../../src/confighttp.cpp:1939)） | 直接 `platf::restart()`。注释明确写着 *"We may not return from this call"* —— 预期是重启进程，不要依赖它返回响应 |
-| `POST /api/reset-display-device-persistence` | [1878](../../../src/confighttp.cpp:1878) | `display_device::reset_persistence()`，清掉 `display_device.state` |
-| `POST /api/reset-portal-token` | [1904](../../../src/confighttp.cpp:1904) | 删除 XDG Portal restore token；无 Portal 采集的平台上也会成功（不动文件系统） |
+| `POST /api/restart` | `restart`（[1939](../../../src/confighttp.cpp#L1939)） | 直接 `platf::restart()`。注释明确写着 *"We may not return from this call"* —— 预期是重启进程，不要依赖它返回响应 |
+| `POST /api/reset-display-device-persistence` | [1878](../../../src/confighttp.cpp#L1878) | `display_device::reset_persistence()`，清掉 `display_device.state` |
+| `POST /api/reset-portal-token` | [1904](../../../src/confighttp.cpp#L1904) | 删除 XDG Portal restore token；无 Portal 采集的平台上也会成功（不动文件系统） |
 
 ### 5.8 `/api/virtual-input/*`（Windows）
 
-三个端点：`status`（[2032](../../../src/confighttp.cpp:2032)）、`license` GET/POST（[2053](../../../src/confighttp.cpp:2053) / [2069](../../../src/confighttp.cpp:2069)）。
+三个端点：`status`（[2032](../../../src/confighttp.cpp#L2032)）、`license` GET/POST（[2053](../../../src/confighttp.cpp#L2053) / [2069](../../../src/confighttp.cpp#L2069)）。
 
 驱动版本判定逻辑：
 
 | 常量 | 值 | 行号 |
 |------|-----|------|
-| `libvirtualhid_minimum_version` | `LIBVIRTUALHID_MINIMUM_VERSION` | [211](../../../src/confighttp.cpp:211) |
-| `VIGEMBUS_MINIMUM_VERSION` | `"1.17.0.0"` | [212](../../../src/confighttp.cpp:212) |
+| `libvirtualhid_minimum_version` | `LIBVIRTUALHID_MINIMUM_VERSION` | [211](../../../src/confighttp.cpp#L211) |
+| `VIGEMBUS_MINIMUM_VERSION` | `"1.17.0.0"` | [212](../../../src/confighttp.cpp#L212) |
 
 | 函数 | 行号 | 作用 |
 |------|------|------|
-| `parse_driver_version_part` | [217](../../../src/confighttp.cpp:217) | 解析版本号中的一个分量 |
-| `parse_driver_version` | [240](../../../src/confighttp.cpp:240) | 解析四段版本 |
-| `is_driver_version_development` | [267](../../../src/confighttp.cpp:267) | 是否开发版本 |
-| `is_driver_version_supported` | [272](../../../src/confighttp.cpp:272) | 是否 ≥ 最低版本 |
-| `read_libvirtualhid_driver_version` | [464](../../../src/confighttp.cpp:464) | 从系统读取已安装驱动版本 |
+| `parse_driver_version_part` | [220](../../../src/confighttp.cpp#L220) | 解析版本号中的一个分量 |
+| `parse_driver_version` | [242](../../../src/confighttp.cpp#L242) | 解析四段版本 |
+| `is_driver_version_development` | [267](../../../src/confighttp.cpp#L267) | 是否开发版本 |
+| `is_driver_version_supported` | [272](../../../src/confighttp.cpp#L272) | 是否 ≥ 最低版本 |
+| `read_libvirtualhid_driver_version` | [464](../../../src/confighttp.cpp#L464) | 从系统读取已安装驱动版本 |
 
-`get_virtualhid_driver_status`（[../../../src/confighttp.cpp:1960](../../../src/confighttp.cpp:1960) 附近）在 Windows 上还会尝试 `platf::virtualhid::create_runtime()`，用 `capabilities()` 补出：
+`get_virtualhid_driver_status`（[../../../src/confighttp.cpp:1960](../../../src/confighttp.cpp#L1960) 附近）在 Windows 上还会尝试 `platf::virtualhid::create_runtime()`，用 `capabilities()` 补出：
 
 | 字段 | 含义 |
 |------|------|
@@ -960,7 +962,7 @@ verify_client_certificate(X509*)
 
 非 Windows 平台统一返回 `error = "libvirtualhid driver status is only available on Windows"`、`backend_name = ""`、`requires_installed_driver = false`。
 
-测试注入点：`set_virtual_input_license_status_provider_for_testing`（[166](../../../src/confighttp.cpp:166)）、`reset_*`（[170](../../../src/confighttp.cpp:170) / [178](../../../src/confighttp.cpp:178)）、`clear_sensitive_string_for_testing`（[184](../../../src/confighttp.cpp:184)）。
+测试注入点：`set_virtual_input_license_status_provider_for_testing`（[166](../../../src/confighttp.cpp#L166)）、`reset_*`（[170](../../../src/confighttp.cpp#L170) / [178](../../../src/confighttp.cpp#L178)）、`clear_sensitive_string_for_testing`（[184](../../../src/confighttp.cpp#L184)）。
 
 ---
 
@@ -981,8 +983,8 @@ sunshine_state.json
 
 | 场景 | 位置 |
 |------|------|
-| 文件不存在 / 无 `root.uniqueid` | `load_state`（[../../../src/nvhttp.cpp:366](../../../src/nvhttp.cpp:366)），日志 `File <path> doesn't exist` |
-| `FRESH_STATE` | `http::init`（[../../../src/httpcommon.cpp:55](../../../src/httpcommon.cpp:55)） |
+| 文件不存在 / 无 `root.uniqueid` | `load_state`（[../../../src/nvhttp.cpp:366](../../../src/nvhttp.cpp#L366)），日志 `File <path> doesn't exist` |
+| `FRESH_STATE` | `http::init`（[../../../src/httpcommon.cpp:55](../../../src/httpcommon.cpp#L55)） |
 
 **丢失这个文件 = 所有配对客户端都要重新配对。** 备份时它比 `sunshine.conf` 更重要。
 

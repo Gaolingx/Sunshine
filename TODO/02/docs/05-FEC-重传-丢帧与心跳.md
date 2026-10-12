@@ -9,6 +9,8 @@
 | **丢帧** | ❌ 没有显式丢帧策略；丢弃是缓冲队列 `drop_oldest` 的副作用 |
 | **心跳** | ✅ 两套：控制通道 ENet 事件刷新超时 + UDP 每流初始 PING |
 
+> 图例见 [README · 图例与阅读约定](./README.md#图例与阅读约定)。
+
 ---
 
 ## 1. FEC 基础：Reed–Solomon
@@ -17,8 +19,8 @@ Sunshine 使用 moonlight-common-c 内置的 `nanors`（[third-party/moonlight-c
 
 | 常量 | 值 | 来源 |
 |------|:--:|------|
-| `DATA_SHARDS_MAX` | **255** | [rs.h:8](../../../third-party/moonlight-common-c/nanors/rs.h) |
-| `RTPA_DATA_SHARDS` | **4** | [RtpAudioQueue.h:11](../../../third-party/moonlight-common-c/src/RtpAudioQueue.h) |
+| `DATA_SHARDS_MAX` | **255** | [rs.h:8](../../../third-party/moonlight-common-c/nanors/rs.h#L8) |
+| `RTPA_DATA_SHARDS` | **4** | [RtpAudioQueue.h:11](../../../third-party/moonlight-common-c/src/RtpAudioQueue.h#L11) |
 | `RTPA_FEC_SHARDS` | **2** | 同上 |
 | `RTPA_TOTAL_SHARDS` | **6** | 同上 |
 
@@ -30,7 +32,7 @@ FEC 的价值：**接收端只要能收到 `data_shards` 个分片中的任意 `
 
 ## 2. 视频 FEC
 
-### 2.1 编码函数 `fec::encode`（`src/stream.cpp:846`）
+### 2.1 编码函数 `fec::encode`（`src/stream.cpp:845`）
 
 ```cpp
 fec::encode(payload, blocksize, fecpercentage, minparityshards, prefixsize)
@@ -121,7 +123,7 @@ if (fecpercentage != 0) {
 
 ### 2.2 帧级分块：一个帧最多 4 个 RS 块
 
-RTP 头里 **`multiFecBlocks` 只有 2 bit 表示块数**（最大 4），所以一帧最多 4 个 RS 块（`src/stream.cpp:1611`）：
+RTP 头里 **`multiFecBlocks` 只有 2 bit 表示块数**（最大 4），所以一帧最多 4 个 RS 块（`src/stream.cpp:1608`）：
 
 ```cpp
 constexpr auto MAX_FEC_BLOCKS = 4;
@@ -174,7 +176,7 @@ for (x = 0; x < fec_blocks_needed; ++x) {
 
 ### 2.3 帧头与 `fecInfo`
 
-广播前会给 payload 插入 8 字节的 **`video_short_frame_header_t`**（`concat_and_insert`，见 `src/stream.cpp:1596`）：
+广播前会给 payload 插入 8 字节的 **`video_short_frame_header_t`**（`concat_and_insert`，见 `src/stream.cpp:1603`）：
 
 ```
 每个 blocksize 切片开头插入 sizeof(video_packet_raw_t) 字节
@@ -185,7 +187,7 @@ for (x = 0; x < fec_blocks_needed; ++x) {
 
 `concat_and_insert(insert_size, slice_size, data1, data2)` 把 `frame_header` 与编码数据拼成一个连续缓冲，**每个 `slice_size` 边界前插入 `insert_size` 字节空位**（后续填 RTP/NV 头）。长度不是 `slice_size` 整数倍时会补齐最后一个切片。
 
-**`fecInfo` 字段布局**（`src/stream.cpp:1734`，写进每个分片）：
+**`fecInfo` 字段布局**（`src/stream.cpp:1736`，写进每个分片）：
 
 ```cpp
 inspect->packet.fecInfo = (uint32_t)( x << 12              // 分片在块内的索引（10 bit）
@@ -598,7 +600,7 @@ recv_ping(...)
   失败守卫：注销两个键并 stop() 该队列（无论成功失败）
 ```
 
-**`SS_PING` 结构**（[third-party/moonlight-common-c/src/Video.h:51](../../../third-party/moonlight-common-c/src/Video.h)）：
+**`SS_PING` 结构**（[third-party/moonlight-common-c/src/Video.h:51](../../../third-party/moonlight-common-c/src/Video.h#L51)）：
 
 ```c
 typedef struct _SS_PING {
@@ -607,7 +609,7 @@ typedef struct _SS_PING {
 } SS_PING;                     // 共 20 字节
 ```
 
-**接收侧的匹配**（`recvThread`，`src/stream.cpp:1421`）：
+**接收侧的匹配**（`recvThread`，`src/stream.cpp:1423`）：
 
 ```cpp
 // 维护 peer_to_video_session / peer_to_audio_session（键 = av_session_id_t）
@@ -625,7 +627,7 @@ async_receive(...) → handler(bytes):
 
 **这里的核心作用**：PING 一旦成功，Sunshine 就记住了客户端的**真实 UDP 源端口**，然后：
 
-1. 创建 **QoS 打标**（见 [04 · 码率控制与 QoS §5](./04-码率控制与QoS.md#5-qosqwave--dscp-打标)）；
+1. 创建 **QoS 打标**（见 [04 · 码率控制与 QoS](./04-码率控制与QoS.md) 第 5 节「qWAVE / DSCP 打标」）；
 2. 启动真正的采集与编码（`video::capture` / `audio::capture`）。
 
 ```cpp
@@ -706,15 +708,15 @@ BOOST_LOG(info) << "Event timeout: " << unique_id;
 
 | 参数 | 位置 | 默认 | 说明 |
 |------|------|:----:|------|
-| `stream.fec_percentage` | [src/config.h:264](../../../src/config.h) | `20` | 范围 `[1, 255]`。**LAN 建议 5~20，WAN 20~50** |
+| `stream.fec_percentage` | [src/config.h:264](../../../src/config.h#L264) | `20` | 范围 `[1, 255]`。**LAN 建议 5~20，WAN 20~50** |
 | `stream.packetsize` | 同上 | `0`（= 客户端 SDP 值） | 范围 `[PACKETSIZE_MIN, PACKETSIZE_MAX]`。小包 → FEC 块数增加，可能触发「关 FEC」 |
 | `stream.ping_timeout` | 同上 | `10 s` | 整数，`>= -1` |
 | `minRequiredFecPackets` | SDP `x-nv-vqos[0].fec.minRequiredFecPackets` | `2` | 校验分片下限，会抬高实际 FEC 百分比 |
-| `MAX_FEC_BLOCKS` | [src/stream.cpp:1611](../../../src/stream.cpp) | `4` | 协议 2 bit 上限 |
-| `DATA_SHARDS_MAX` | [nanors/rs.h:8](../../../third-party/moonlight-common-c/nanors/rs.h) | `255` | RS 库上限 |
+| `MAX_FEC_BLOCKS` | [src/stream.cpp:1608](../../../src/stream.cpp#L1608) | `4` | 协议 2 bit 上限 |
+| `DATA_SHARDS_MAX` | [nanors/rs.h:8](../../../third-party/moonlight-common-c/nanors/rs.h#L8) | `255` | RS 库上限 |
 | `MAX_AUDIO_PACKET_SIZE` | [src/stream.cpp](../../../src/stream.cpp) | `1400` | 音频载荷上限 |
-| `MAX_RTP_HEADER_SIZE` | [Video.h:40](../../../third-party/moonlight-common-c/src/Video.h) | `16` | 计算 `blocksize` 用 |
-| `round_to_pkcs7_padded(2048)` | [src/stream.cpp:2344](../../../src/stream.cpp) | `2048` | 音频分片大小（AES-CBC 需要 PKCS#7 对齐） |
+| `MAX_RTP_HEADER_SIZE` | [Video.h:40](../../../third-party/moonlight-common-c/src/Video.h#L40) | `16` | 计算 `blocksize` 用 |
+| `round_to_pkcs7_padded(2048)` | [src/stream.cpp:2344](../../../src/stream.cpp#L2344) | `2048` | 音频分片大小（AES-CBC 需要 PKCS#7 对齐） |
 
 **调优直觉**：
 
