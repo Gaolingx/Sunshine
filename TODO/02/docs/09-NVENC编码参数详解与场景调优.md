@@ -45,14 +45,14 @@ sunshine.conf 里的 nvenc_xxx
 `apply_config()` 的 NVENC 段（[src/config.cpp:1635](../../../src/config.cpp#L1635)）对每个键做**独立的范围检查**。要点三条：
 
 1. **不做交叉校验** —— 例如 `nvenc_min_qp_h264 = 40` 与 `nvenc_max_qp_h264 = 30` 会被双双接受（见 [§6 避雷第 3 条](#6-避雷清单)）。
-2. **枚举值不合法会降级到默认**，不是报错退出：`nvenc_tuning` 值不认识 → `ultra_low_latency`；`nvenc_twopass` 不认识 → `quarter_resolution`；`nvenc_split_encode` 不认识 → `driver_decides`。
+2. **枚举值不合法会降级到默认**，不是报错退出：`nvenc_twopass` 不认识 → `quarter_resolution`；`nvenc_split_encode` 不认识 → `driver_decides`。
 3. **越界值被丢弃而不是被夹紧** —— 写 `nvenc_aq_strength = 20` 不会变成 15，而是**整项失效回到 0（= 驱动默认）**。
 
 ### 1.2 关 2：Windows 与 Linux 不是同一套实现
 
 | 键 | Windows 原生 SDK | Linux FFmpeg | 备注 |
 |----|:----------------:|:------------:|------|
-| `nvenc_preset` / `nvenc_tuning` / `nvenc_twopass` | ✓ | ✓ | 经 `nv_legacy` 镜像成 `preset` / `tune` / `multipass` |
+| `nvenc_preset` / `nvenc_twopass` | ✓ | ✓ | 经 `nv_legacy` 镜像成 `preset` / `multipass` |
 | `nvenc_spatial_aq` / `nvenc_temporal_aq` / `nvenc_aq_strength` | ✓ | ✓ | `spatial-aq` / `temporal-aq` / `aq-strength`；⚠️ Linux 上该值范围是 1–15，默认 0 会越界导致建流失败 |
 | `nvenc_nonref_p` / `nvenc_weighted_prediction` / `nvenc_ldkfs` | ✓ | ✓ | `nonref_p` / `weighted_pred` / `ldkfs` |
 | `nvenc_vbv_increase` | ✓（**有**能力位检查） | ✓（**无**能力位检查） | 见 [§7.1](#71-放大机制一vbv-放大单帧窗口被撑大) |
@@ -73,7 +73,6 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
 | `nvenc_vbv_increase` | `NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE` | ★ **整段 VBV 设置被跳过** → 键彻底无效，且日志里连 `vbv+N` 后缀都不打印 | 不做能力位检查，直接生效 |
 | `nvenc_temporal_aq` | `NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ` | 打一条 `gpu doesn't support temporal AQ` warning 后忽略 | **编码器初始化失败**（直接报错返回，不降级） |
 | `nvenc_weighted_prediction` | `NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION` | 静默不设置 `enableWeightedPrediction` | **编码器初始化失败**（同上） |
-| `nvenc_tuning = uhq`（H.264） | 语义不支持（非能力位） | 打 warning 回退 `hq` | **静默**把 `tune` 换掉 |
 
 > ★ `nvenc_vbv_increase` 那一行是最贵的坑：它把"单帧 VBV"整块放在能力位判断里面，所以**老 GPU 上调这个键，看到的现象是"完全没变化"，而不是"画质变好了"**。
 
@@ -94,13 +93,12 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
 
 ## 2. 参数总表
 
-23 个键。⚠️ 标记的是**本 fork 新增**（上游 `master` 没有），链接列指向逐项详解。
+22 个键。⚠️ 标记的是**本 fork 新增**（上游 `master` 没有），链接列指向逐项详解。
 
 | 键 | 默认 | 取值范围 | 主要影响 | ⚠️ | 详解 |
 |----|------|---------|---------|:--:|:----:|
-| `nvenc_preset` | `1` | 1–7 | 编码速度 ↔ 压缩效率；**不改变码率** | | [§4.1](#41-preset--tuning--twopass编码速度与质量档) |
-| `nvenc_tuning` | `ull` | `hq` / `ll` / `ull` / `uhq` | 延迟 ↔ 画质（编码器内部流水线策略） | ⚠️ | [§4.1](#41-preset--tuning--twopass编码速度与质量档) |
-| `nvenc_twopass` | `quarter_res` | `disabled` / `quarter_res` / `full_res` | 画质 ↔ 占用 CUDA 核心 | | [§4.1](#41-preset--tuning--twopass编码速度与质量档) |
+| `nvenc_preset` | `1` | 1–7 | 编码速度 ↔ 压缩效率；**不改变码率** | | [§4.1](#41-preset--twopass编码速度与质量档) |
+| `nvenc_twopass` | `quarter_res` | `disabled` / `quarter_res` / `full_res` | 画质 ↔ 占用 CUDA 核心 | | [§4.1](#41-preset--twopass编码速度与质量档) |
 | `nvenc_spatial_aq` | `disabled` | bool | 低码率下帧内比特重分配（**分配方向文档自相矛盾**，见详解）；占用 CUDA 核心 | | [§4.2](#42-spatial_aq--aq_strength--temporal_aq自适应量化) |
 | `nvenc_aq_strength` | `0` | 0–15 | AQ 强度；0 = 驱动默认 | ⚠️ | [§4.2](#42-spatial_aq--aq_strength--temporal_aq自适应量化) |
 | `nvenc_temporal_aq` | `disabled` | bool | 运动场景画质 ↑；**与严格 CBR 冲突** | ⚠️ | [§4.2](#42-spatial_aq--aq_strength--temporal_aq自适应量化) |
@@ -140,7 +138,7 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
 | `zeroReorderDelay` | **`1`**（[:312](../../../src/nvenc/nvenc_base.cpp#L312)） | 编码器发一帧收一帧，Sunshine 的推流管线是同步的 |
 | `enableLookahead` | **`0`**（[:313](../../../src/nvenc/nvenc_base.cpp#L313)） | Lookahead 需要预看未来帧 → 必然引入延迟 |
 | `gopLength` / `idrPeriod` | **`NVENC_INFINITE_GOPLENGTH`**（[:309](../../../src/nvenc/nvenc_base.cpp#L309)、H.264 [:428](../../../src/nvenc/nvenc_base.cpp#L428)、HEVC [:466](../../../src/nvenc/nvenc_base.cpp#L466)、AV1 [:510](../../../src/nvenc/nvenc_base.cpp#L510)） | **不做周期性 IDR**。关键帧请求完全交给客户端的 `IDX_REQUEST_IDR_FRAME`，避免"定时大帧"制造规律性卡顿 |
-| `lowDelayKeyFrameScale` | 只在 `nvenc_ldkfs > 0` 时才覆盖（[:315](../../../src/nvenc/nvenc_base.cpp#L315)），否则**保留驱动从 tuning info 推导的值** | 驱动会按 tuning 给出合理值（LL→2、ULL→1）；写死会反过来干扰 `nvenc_tuning` |
+| `lowDelayKeyFrameScale` | 只在 `nvenc_ldkfs > 0` 时才覆盖（[:315](../../../src/nvenc/nvenc_base.cpp#L315)），否则**保留驱动的推定值** | 编码会话固定为超低延迟档（`tuningInfo = NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY`），驱动据此给出的推定值是 1；写死会反过来覆盖它 |
 | `repeatSPSPPS` / `repeatSeqHdr` | **`1`**（H.264 [:433](../../../src/nvenc/nvenc_base.cpp#L433)、HEVC [:471](../../../src/nvenc/nvenc_base.cpp#L471)、AV1 [:513](../../../src/nvenc/nvenc_base.cpp#L513)） | 丢包后中途加入/恢复必需的参数集重复 |
 | `sliceMode` / `sliceModeData` | **`3`（按 slice 数切）/ `client_config.slicesPerFrame`** | slice 数由客户端决定，是为了配合 UDP 分片大小与 FEC 粒度 |
 | `list0_option` | **恒为 `NV_ENC_NUM_REF_FRAMES_1`**（`configure_reference_frames()`） | 每帧只参考前一帧以压低延迟；DPB 里多留几帧只是为了 RFI 回退有帧可用 |
@@ -158,7 +156,7 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
 
 ## 4. 参数详解
 
-### 4.1 `preset` / `tuning` / `twopass`：编码速度与质量档
+### 4.1 `preset` / `twopass`：编码速度与质量档
 
 #### `nvenc_preset`（1–7，默认 1）
 
@@ -166,33 +164,9 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
 - **为什么需要设**：它是"画质 vs 编码延迟/GPU 占用"的总开关，也是唯一能同时影响两者的档位键。
 - **改了有什么效果**：
   - P1 → P7：画质 ↑、编码耗时 ↑；**请求码率完全不变**（`averageBitRate` 与 preset 无关）。
-  - 实测影响排序：在 [TODO/01 的差异分析](<../../01/Rustdesk 和 Sunshine 延迟 带宽差异.md>) 里，preset 对"同码率画质"的影响排在第 5 位，**远小于编码格式（H.264 vs HEVC/AV1）、分辨率、帧率、tuning 这几项**。
+  - 实测影响排序：在 [TODO/01 的差异分析](<../../01/Rustdesk 和 Sunshine 延迟 带宽差异.md>) 里，preset 对"同码率画质"的影响排在第 5 位，**远小于编码格式（H.264 vs HEVC/AV1）、分辨率、帧率这几项**。
 - **什么时候该动**：客户端/网络是瓶颈时**不要动它**（官方文档口径：只在网络或解码器受限时再调）；GPU 有富余、且你在意文字锐度/暗部细节时才往 4–7 走。
 - **副作用**：高 preset + 高分辨率高帧率会让单帧编码时间逼近甚至超过帧间隔（4K120 时 8.33 ms），此时**延迟不是来自码率而是来自编码器吞吐**。
-- **⚠️ 一条不写在 Sunshine 文档里的 preset 副作用**：SDK 头文件说明 **P3–P7 在 `hq` / `lossless` 档下会内部启用 B 帧**（`nvEncodeAPI.h` 中 `NV_ENC_PRESET_P1_GUID` 附近的注释：*"Presets P3 to P7 for H264 and Presets P2 to P7 for HEVC have B frames enabled by default for HIGH_QUALITY and LOSSLESS tuning info"*）。Sunshine 把 `frameIntervalP` 硬编码为 1（[:310](../../../src/nvenc/nvenc_base.cpp#L310)），**所以这条不会给你带来 B 帧延迟** —— 但它会牵连 `nvenc_weighted_prediction` 的合法性判定（见 [§4.3](#43-nonref_p--weighted_prediction--ldkfs帧类型与参考行为)）。
-
-#### `nvenc_tuning` ⚠️（`hq` / `ll` / `ull` / `uhq`，默认 `ull`）
-
-- **是什么**：向驱动声明"这个流的优化目标"。它在底层同时做两件事：
-  1. 决定 `NV_ENC_INITIALIZE_PARAMS::tuningInfo`；
-  2. 作为 `nvEncGetEncodePresetConfigEx()` 的输入，**改变 preset 基线配置本身**（不只是加个开关）。
-- **为什么需要设**：`preset` 只说"花多少算力"，`tuning` 才说"算力花在哪"。低延迟场景必须显式选 `ull`，否则驱动按 `hq` 给你一套追求压缩率的基线（更多参考帧、更激进的运动搜索），延迟会明显高于预期。
-- **取值语义**：
-
-  | 值 | 定位 | 延迟 | 同码率画质 | 典型用途 |
-  |:--:|------|:----:|:---------:|---------|
-  | `hq` | High Quality | 最高 | 最好 | 录屏、本地高质量归档 |
-  | `ll` | Low Latency | 中 | 中 | 局域网高刷游戏（帧时间敏感但对 1 帧差异不敏感） |
-  | `ull` | **Ultra Low Latency**（默认） | **最低** | 最低（同码率下需多 20–50% 码率才能追平 hq） | 云游戏 / 网络串流 |
-  | `uhq` | Ultra High Quality | — | 最高 | 4K HDR 高质量串流 |
-
-- **为什么默认是 `ull`**：Sunshine 的定位是"实时串流"，UL 档会缩短编码器内部流水线、减少参考帧依赖，代价是同画质需要更高码率 —— 而这个代价在"码率可协商"的场景里是划算的。
-- **⚠️ 不可用组合**：`uhq` + **H.264**。
-  - Windows 原生路径：打 warning `ultra high quality tuning is not supported for H.264, using high quality tuning`，回退 `hq`（[`tuning_info_from_config()`](../../../src/nvenc/nvenc_base.cpp#L213)）。
-  - Linux FFmpeg 路径：**静默**把 `tune` 从 `ULTRA_HIGH_QUALITY` 换成 `HIGH_QUALITY`（[src/video.cpp:849](../../../src/video.cpp#L849) 的 lambda），日志无任何提示。
-  - 换句话说：**H.264 上写 `uhq` = 写 `hq`，但你在一条路径上会被警告、在另一条上完全不知道。**
-- **⚠️ 前置条件**：`uhq` 还要求 **HEVC/AV1 + Turing 及更新**的 GPU。
-- **改动副作用**：`tuning_info` 属于**只能在初始化时设定**的字段 —— 改它必须**重建编码会话**（活动会话热重载不生效）。另外它会重设 `lowDelayKeyFrameScale` 的驱动默认值，所以调 `nvenc_ldkfs` 之前先确定 `tuning`。
 
 #### `nvenc_twopass`（`disabled` / `quarter_res` / `full_res`，默认 `quarter_res`）
 
@@ -250,7 +224,7 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
 - **为什么需要设**：游戏里过场动画、加载画面、HDR 场景切换常见淡入淡出，这个开关能省下可观的码率。
 - **⚠️ 限制与冲突（每条都给出处）**：
   - **只有 NVENC H.264 编码器支持**（WebUI 与官方键文档口径）。原生路径还要求能力位 `NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION`，不支持时**静默不设**（[:742](../../../src/nvenc/nvenc_base.cpp#L742)）。
-  - **与 B 帧冲突（SDK 原文）**：`enableWeightedPrediction` 的注释写明 *"Not supported if encode session is configured for B-Frames (i.e. frameIntervalP > 1 **or preset >= P3 when tuningInfo = HIGH_QUALITY or LOSSLESS**)"*。Sunshine 把 `frameIntervalP` 硬编码为 1（[:310](../../../src/nvenc/nvenc_base.cpp#L310)），这条在最终会话里被压掉了；但 **SDK 把"P3 以上 + HQ 档"单独列为构成 B 帧的条件**，说明这半条要由驱动来解释 preset。保守做法：开了加权预测就**别同时用 `hq` / `uhq` 档 + P3 以上**。
+  - **与 B 帧冲突（SDK 原文）**：`enableWeightedPrediction` 的注释写明 *"Not supported if encode session is configured for B-Frames (i.e. frameIntervalP > 1 or preset >= P3 when tuningInfo = HIGH_QUALITY or LOSSLESS)"*。Sunshine 把 `frameIntervalP` 硬编码为 1（[:310](../../../src/nvenc/nvenc_base.cpp#L310)），且会话固定使用超低延迟档（`tuningInfo` 不可能是 `HIGH_QUALITY` / `LOSSLESS`），**所以这一条在 Sunshine 里不会触发**。
   - **与自适应量化冲突**：Sunshine 的官方键文档写 *"it conflicts with B frames and with adaptive quantization"*，但 SDK 头文件**只有 B 帧那一条**，没有 AQ 互斥的条文。也就是说这一条的后果**以驱动实际行为为准**，而 Sunshine **不做任何交叉校验** —— 你同时开两者不会收到报错，日志里 `weighted-prediction` 和 `spatial-aq` 会并排出现，看不出谁生效。**要加权预测就别要 AQ，二选一。**
   - **与 split encode 冲突（SDK 明文）**：`splitEncodeMode` 的注释写 *"Not supported if any of the following features: weighted prediction, ..."*，详见 [§4.6](#46-split_encode--h264_cavlc格式与并行)。
   - **Linux 差异（不是"取决于驱动"，是硬失败）**：`weighted_pred` 在 FFmpeg 路径上对 **AV1 / HEVC / H.264 三种编码器都会被写入**（[video.cpp:796](../../../src/video.cpp#L796)、[:823](../../../src/video.cpp#L823)、[:861](../../../src/video.cpp#L861)），而 FFmpeg 在 `weighted_pred > 0` 且能力位 `NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION` 查询失败时**直接返回 `AVERROR(ENOSYS)`**（[nvenc.c:509](../../../third-party/build-deps/third-party/FFmpeg/FFmpeg/libavcodec/nvenc.c#L509)），且 Sunshine 的 nvenc `fallback_options` 是空的（无重试）→ **编码器直接起不来**。能力位按 codec guid 查询，所以"只有 H.264 支持加权预测"这个原生口径意味着 **Linux 上在 HEVC/AV1 开它很可能是初始化失败，而不是被忽略** → **建议只在 H.264 下开这个键**。
@@ -260,11 +234,11 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
 
 - **是什么**：`lowDelayKeyFrameScale` —— **I 帧与 P 帧的比特比**（相对值）。它决定"关键帧允许多花几倍于普通帧的比特"。
 - **为什么需要设**：I 帧天然比 P 帧大得多。在严格 CBR + 单帧 VBV 下，编码器必须压小 I 帧才能塞进一帧的预算，于是 I 帧质量被牺牲；把它调大就是"允许 I 帧超发"。
-- **默认值 0 的含义（重要）**：**0 = 保留驱动从 tuning info 推导出的值**（LL 档通常给 2，ULL 档通常给 1），不是"用 1"。
+- **默认值 0 的含义（重要）**：**0 = 保留驱动的推定值**（本 fork 固定使用超低延迟档，驱动据此给出的推定值是 1），不是"用 1"。
 - **改了有什么效果**：
   - 调大（2→10）：关键时刻（新会话开始、丢包后请求 IDR）画面更干净，但**那次关键帧会明显超发**，在配速窗口内造成一次突发。
   - 调小到 1：关键帧被压得很狠 → 会话刚开始的几百毫秒画面糊；但对网络最友好。
-- **⚠️ 为什么会在这个 fork 里被暴露**：在此之前它被**硬编码成 1**，结果反复覆盖驱动按 tuning 推导的值，导致 `nvenc_tuning = ll` 想按 `ldkfs = 2` 工作却做不到 —— 也就是 **`nvenc_tuning` 部分失效**。现在的正确用法是：**改了 `tuning` 之后把 `ldkfs` 留 0，让驱动自己配**。
+- **⚠️ 为什么会在这个 fork 里被暴露**：在此之前它被**硬编码成 1**，结果反复覆盖驱动推定的值。现在的正确用法是：**保持 0，让驱动自己配**。
 - **⚠️ 有效范围**：该字段只在**单帧 VBV + CBR** 的语义下由驱动使用。一旦你为了画质把 `nvenc_vbv_increase` 开大，单帧窗口被撑宽，调 `ldkfs` 的意义就被 VBV 的放宽淹没了。
 
 ### 4.4 `vbv_increase`：码率窗口
@@ -407,7 +381,7 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
 调参最大的浪费是"改了、以为生效了、结果是静默失效"。**唯一的权威证据是启动串流后那一条 `NvEnc: created encoder` 日志。**
 
 ```
-NvEnc: created encoder v1301 HEVC  P1 ull async two-pass vbv+50 ldkfs=2 rfi
+NvEnc: created encoder v1301 HEVC  P1 async two-pass vbv+50 ldkfs=2 rfi
                     weighted-prediction spatial-aq aq-strength=8 nonref-p
                     qpmin=24 qpmax=38 sfe
 ```
@@ -445,12 +419,10 @@ NvEnc: requested encoded frame size 166.7 kB
 
 ```
 ① 先定码率与分辨率/帧率（客户端侧）        ← 影响最大，先别碰编码器参数
-② 再定 nvenc_tuning（决定骨架）+ preset     ← tuning 需要重建会话
+② 再定 preset（画质 ↔ 编码延迟/算力预算）
 ③ 再考虑 twopass / spatial_aq（画质，占 CUDA）
 ④ 最后才动 vbv_increase + max_qp（码率纪律，风险最高）
 ```
-
-**⚠️ `nvenc_tuning` 的生效时机**：`tuning_info` 只在 `NV_ENC_INITIALIZE_PARAMS` 里设定，**改它必须重建编码会话**。热重载配置不会作用于正在运行的会话。
 
 ---
 
@@ -463,24 +435,22 @@ NvEnc: requested encoded frame size 166.7 kB
 | 1 | A | `nvenc_weighted_prediction = enabled` + `nvenc_spatial_aq = enabled` | 二者之一被驱动忽略，且**配置层不会报错**：日志里 `weighted-prediction` 与 `spatial-aq` 并排出现，看不出谁生效 | Sunshine 官方键文档写 *"conflicts with adaptive quantization"*，但 SDK 头文件**只有 B 帧那一半**；Sunshine 不做交叉校验 → 后果以驱动实际行为为准（[§4.3](#43-nonref_p--weighted_prediction--ldkfs帧类型与参考行为)） |
 | 2 | A | `nvenc_split_encode = enabled` + `nvenc_weighted_prediction = enabled` | **两个开关同时失效**，且没有任何报错 | SDK 明文：`splitEncodeMode` *"Not supported if any of the following features: weighted prediction, alpha layer encoding, subframe mode, ..."* → 这是"两个看起来无关的开关互相否决"的典型（[§4.6](#46-split_encode--h264_cavlc格式与并行)） |
 | 3 | A | `nvenc_min_qp_*` > `nvenc_max_qp_*`（如 min 40 / max 30） | **驱动照单接受**：码率**既到不了目标又剧烈抖动** —— 实测均值 0.19× 目标，单帧 9.9× 预算，排障极难 | ✅ **Sunshine 的校验不做交叉检查**（[src/config.cpp:1635](../../../src/config.cpp#L1635) 每键独立校验），错配直接穿透到驱动（[§4.5](#45-qp-上下限)） |
-| 4 | A | `nvenc_tuning = uhq` + H.264 | Windows：警告后回退 `hq`；Linux：**静默**回退 `hq` | H.264 不支持 UHQ 档；两条路径处理方式不一致（[:222](../../../src/nvenc/nvenc_base.cpp#L222) vs. [video.cpp:849](../../../src/video.cpp#L849)） |
-| 5 | A | 在 Linux 上设 `nvenc_enable_min_qp` / `nvenc_max_qp` 及数值 | **完全无效果且无任何提示** | ① FFmpeg 选项表里没有 `qpmin`/`qpmax`，`nv_legacy` 也不携带这两个字段；② **即便补上也没用** —— CBR 下 FFmpeg 根本不映射 QP（`nvenc_override_rate_control` 的 `case NV_ENC_PARAMS_RC_CBR: break;`，[nvenc.c:946](../../../third-party/build-deps/third-party/FFmpeg/FFmpeg/libavcodec/nvenc.c#L946)），只有 `set_vbr()` 会映射 |
-| 6 | A | `nvenc_enable_max_qp = enabled`（**不配** `nvenc_vbv_increase`） | 单帧 VBV 不再被遵守 → 难帧无限超发 → 分片丢弃/重传/请求 IDR（正反馈，见 [§7.2](#72-放大机制二max_qp-让编码器放弃码率约束)） | 官方 warning 原文：capping the QP … **lets the encoder overshoot the single frame VBV/HRD limit** |
-| 7 | A | `nvenc_enable_max_qp = enabled` 但 `max_qp` 保持默认（51/51/255） | **等同于没开** | 上限侧三个默认值都是各自标度的 100%，语义相互等价。⚠️ **下限侧不是这样**：`min_qp_av1 = 23` 只占 0–255 的 **9%**，而 `min_qp_h264/hevc = 19/23` 占 **37%/45%** —— "打开开关但用默认值"在 AV1 上近乎空操作（[§4.5.1](#451-av1-的-qp-标度不可按数字换算)） |
-| 8 | B | `nvenc_vbv_increase = 400` + 弱网/无线 | 单帧尖峰 = 5× 平均码率 → 交换机/路由器队列溢出 → 整队丢弃 | [05 §5](./05-FEC-重传-丢帧与心跳.md#5-丢帧没有显式策略只有队列覆盖) 的 `drop_oldest` 整队清空；官方 warning：Can lead to network packet loss |
-| 9 | B | `nvenc_temporal_aq = enabled` + `nvenc_vbv_increase = 0` | 画质抖动，收益为负 | 源码注释：**may conflict with strict CBR**；单帧 VBV 下没有余地容纳它重排的比特 |
-| 10 | B | `nvenc_twopass = full_res` + GPU 满载游戏 | **游戏掉帧**（不是串流掉帧） | 两遍编码占 CUDA 核心，与游戏抢 SM |
-| 11 | B | `nvenc_spatial_aq = enabled` + `nvenc_temporal_aq = enabled` + `nvenc_twopass = full_res` | CUDA 占用三重叠加，帧时间抖动 | 三项都标注 "uses CUDA cores" |
-| 12 | B | `nvenc_nonref_p = enabled` + 有丢包的链路 | 丢包影响帧数变多，恢复变慢 | 非参考帧不能作为后续帧的恢复点 |
-| 13 | B | `nvenc_enable_min_qp` + 静态桌面/办公串流 + 下限调太高（≥30） | 纯色区域出现可见块状/色带 | min QP 的语义就是"不许画质好过这个程度" |
-| 14 | B | `nvenc_ldkfs` 调大（≥6）+ 已有 `nvenc_vbv_increase > 0` | 关键帧超发，短暂卡顿；调它的收益被 VBV 放宽淹没 | `ldkfs` 的语义属于单帧 VBV CBR，VBV 一宽就失去参考系 |
-| 15 | B | `nvenc_preset = 7` + `nvenc_tuning = uhq` + 4K120 | 单帧编码时间有**超过帧间隔（8.33 ms）的风险** → 编码器吞吐成为延迟瓶颈 | 与码率无关的**吞吐型延迟**，且会被误诊为"网络卡" |
-| 16 | B | `nvenc_h264_cavlc = enabled` | **纯损失 5–15% 压缩率**，零延迟收益 | NVENC 的 CABAC 是硬件流水线，不增加延迟；源码注释："not relevant, here for historical reasons" |
-| 17 | B | `nvenc_split_encode = enabled` + H.264 或单 NVENC 单元 GPU 或 Linux | 无效果（Windows 上静默；Linux 上更彻底地无效） | `videoFormat <= 0` 直接 return；`NUM_ENCODER_ENGINES <= 1` 直接 return；FFmpeg 路径无对应选项 |
-| 18 | C（Windows）/ **A（Linux）** | 只写 `nvenc_aq_strength`，不设 `nvenc_spatial_aq` / `nvenc_temporal_aq` | Windows：**无效果**，但日志会打印 `aq-strength=N`；**Linux：编码器直接起不来**（默认值 0 越界，该项在 FFmpeg 里是 1–15） | 强度字段单独存在无意义；Linux 上则是"以为在调 AQ、结果建流失败"（[§1.2](#12-关-2windows-与-linux-不是同一套实现)） |
-| 19 | C | `nvenc_vbv_increase` 在能力位不支持的 GPU 上 | 无效果，且日志连 `vbv+N` 都不打印 | 整段 VBV 代码在 `NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE` 判断内 |
-| 20 | C | `nvenc_tuning = uhq` 在 Turing 之前的 GPU（Pascal / Volta）上 | 驱动不认这一档 → 初始化失败或由驱动回退，取决于驱动版本 | Sunshine **没有任何 GPU 代数检查**，只对 H.264 做了回退（[`tuning_info_from_config()`](../../../src/nvenc/nvenc_base.cpp#L213)）；UHQ 是 Turing（第 5 代 NVENC）才引入的档位 |
-| 21 | C | `nvenc_twopass` / `nvenc_split_encode` 写错枚举值 | 静默降级到默认（`quarter_resolution` / `driver_decides`）并打 warning | 枚举解析的默认分支行为 |
+| 4 | A | 在 Linux 上设 `nvenc_enable_min_qp` / `nvenc_max_qp` 及数值 | **完全无效果且无任何提示** | ① FFmpeg 选项表里没有 `qpmin`/`qpmax`，`nv_legacy` 也不携带这两个字段；② **即便补上也没用** —— CBR 下 FFmpeg 根本不映射 QP（`nvenc_override_rate_control` 的 `case NV_ENC_PARAMS_RC_CBR: break;`，[nvenc.c:946](../../../third-party/build-deps/third-party/FFmpeg/FFmpeg/libavcodec/nvenc.c#L946)），只有 `set_vbr()` 会映射 |
+| 5 | A | `nvenc_enable_max_qp = enabled`（**不配** `nvenc_vbv_increase`） | 单帧 VBV 不再被遵守 → 难帧无限超发 → 分片丢弃/重传/请求 IDR（正反馈，见 [§7.2](#72-放大机制二max_qp-让编码器放弃码率约束)） | 官方 warning 原文：capping the QP … **lets the encoder overshoot the single frame VBV/HRD limit** |
+| 6 | A | `nvenc_enable_max_qp = enabled` 但 `max_qp` 保持默认（51/51/255） | **等同于没开** | 上限侧三个默认值都是各自标度的 100%，语义相互等价。⚠️ **下限侧不是这样**：`min_qp_av1 = 23` 只占 0–255 的 **9%**，而 `min_qp_h264/hevc = 19/23` 占 **37%/45%** —— "打开开关但用默认值"在 AV1 上近乎空操作（[§4.5.1](#451-av1-的-qp-标度不可按数字换算)） |
+| 7 | B | `nvenc_vbv_increase = 400` + 弱网/无线 | 单帧尖峰 = 5× 平均码率 → 交换机/路由器队列溢出 → 整队丢弃 | [05 §5](./05-FEC-重传-丢帧与心跳.md#5-丢帧没有显式策略只有队列覆盖) 的 `drop_oldest` 整队清空；官方 warning：Can lead to network packet loss |
+| 8 | B | `nvenc_temporal_aq = enabled` + `nvenc_vbv_increase = 0` | 画质抖动，收益为负 | 源码注释：**may conflict with strict CBR**；单帧 VBV 下没有余地容纳它重排的比特 |
+| 9 | B | `nvenc_twopass = full_res` + GPU 满载游戏 | **游戏掉帧**（不是串流掉帧） | 两遍编码占 CUDA 核心，与游戏抢 SM |
+| 10 | B | `nvenc_spatial_aq = enabled` + `nvenc_temporal_aq = enabled` + `nvenc_twopass = full_res` | CUDA 占用三重叠加，帧时间抖动 | 三项都标注 "uses CUDA cores" |
+| 11 | B | `nvenc_nonref_p = enabled` + 有丢包的链路 | 丢包影响帧数变多，恢复变慢 | 非参考帧不能作为后续帧的恢复点 |
+| 12 | B | `nvenc_enable_min_qp` + 静态桌面/办公串流 + 下限调太高（≥30） | 纯色区域出现可见块状/色带 | min QP 的语义就是"不许画质好过这个程度" |
+| 13 | B | `nvenc_ldkfs` 调大（≥6）+ 已有 `nvenc_vbv_increase > 0` | 关键帧超发，短暂卡顿；调它的收益被 VBV 放宽淹没 | `ldkfs` 的语义属于单帧 VBV CBR，VBV 一宽就失去参考系 |
+| 14 | B | `nvenc_preset = 7` + 4K120 | 单帧编码时间有**超过帧间隔（8.33 ms）的风险** → 编码器吞吐成为延迟瓶颈 | 与码率无关的**吞吐型延迟**，且会被误诊为"网络卡" |
+| 15 | B | `nvenc_h264_cavlc = enabled` | **纯损失 5–15% 压缩率**，零延迟收益 | NVENC 的 CABAC 是硬件流水线，不增加延迟；源码注释："not relevant, here for historical reasons" |
+| 16 | B | `nvenc_split_encode = enabled` + H.264 或单 NVENC 单元 GPU 或 Linux | 无效果（Windows 上静默；Linux 上更彻底地无效） | `videoFormat <= 0` 直接 return；`NUM_ENCODER_ENGINES <= 1` 直接 return；FFmpeg 路径无对应选项 |
+| 17 | C（Windows）/ **A（Linux）** | 只写 `nvenc_aq_strength`，不设 `nvenc_spatial_aq` / `nvenc_temporal_aq` | Windows：**无效果**，但日志会打印 `aq-strength=N`；**Linux：编码器直接起不来**（默认值 0 越界，该项在 FFmpeg 里是 1–15） | 强度字段单独存在无意义；Linux 上则是"以为在调 AQ、结果建流失败"（[§1.2](#12-关-2windows-与-linux-不是同一套实现)） |
+| 18 | C | `nvenc_vbv_increase` 在能力位不支持的 GPU 上 | 无效果，且日志连 `vbv+N` 都不打印 | 整段 VBV 代码在 `NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE` 判断内 |
+| 19 | C | `nvenc_twopass` / `nvenc_split_encode` 写错枚举值 | 静默降级到默认（`quarter_resolution` / `driver_decides`）并打 warning | 枚举解析的默认分支行为 |
 
 ### 6.1 三组"看起来能配、实际上不该配"
 
@@ -602,7 +572,6 @@ FEC 回算的方向请注意：**它把编码目标码率调低**（因为请求
 ```ini
 # 低延迟总纲：不碰码率纪律（vbv_increase = 0），不做质量上限（max_qp 关）
 nvenc_preset = 1
-nvenc_tuning = ull
 nvenc_twopass = quarter_res
 nvenc_spatial_aq = disabled
 nvenc_temporal_aq = disabled
@@ -626,7 +595,6 @@ nvenc_latency_over_power = enabled
 
 ```ini
 nvenc_preset = 4
-nvenc_tuning = ull
 nvenc_twopass = quarter_res
 nvenc_spatial_aq = enabled
 nvenc_aq_strength = 8
@@ -661,7 +629,6 @@ nvenc_split_encode = disabled
 
 ```ini
 nvenc_preset = 5
-nvenc_tuning = hq
 nvenc_twopass = full_res
 nvenc_spatial_aq = enabled
 nvenc_aq_strength = 10
@@ -681,13 +648,13 @@ nvenc_split_encode = driver_decides
 **为什么这样配**：
 
 - **`nonref_p = enabled` 是办公场景收益最大的单项**：桌面内容绝大部分是静止或局部变化的，"省掉那些毫无意义的静态帧"直接换成码率。
-- **`tuning = hq` 而不是 `ull`**：办公场景**对 1 帧的编码延迟不敏感**（没有需要输入延迟反馈的玩法），而 `hq` 在同码率下的文字锐度、细线还原明显更好。这是本文里最典型的"该换骨架就换骨架"的场景。
+- **`preset` 往高走而不是换质量档**：办公场景**对 1 帧的编码延迟不敏感**（没有需要输入延迟反馈的玩法），把算力花在运动搜索/模式决策上能明显改善文字锐度与细线还原。这也是这套固定骨架里最安全的"换画质"手段 —— 它只花算力，不改变延迟结构。
 - **`max_qp + vbv_increase` 成对出现**：办公内容里"难帧"通常是滚屏/视频播放窗口/大表格重绘，单帧预算不够时会糊成一片文字。官方要求这一对必须配套。以 1440p60、客户端请求 50 Mbps（`fec_percentage = 20` ⇒ 视频目标约 40 Mbps）为例：单帧预算 ≈ 40 000 / 8 / 60 ≈ **83 kB**，`vbv_increase = 50` 后 ≈ **125 kB** —— 这点余量刚好覆盖上述难帧，又不会像游戏场景那样无限超发（见 [§7.3](#73-放大机制三nvenc_vbv_increase-与-max_qp-的乘积)）。
 - **`min_qp` 关**：`min_qp` 的收益（摊平码率）在办公场景没有价值，而它的代价（静态画面糊）恰好是办公场景最不能接受的 —— 纯色背景色带、文字边缘块状。**这里应该用 `max_qp` 而不是 `min_qp`。**
 - **`preset = 5` + `twopass = full_res`**：桌面内容帧间差异小，单帧编码时间本来就短，可以把算力换成画质。
 - **编码格式建议 HEVC/AV1**：H.264 在低码率下的文字块效应最明显，办公场景应尽量避免。
 
-**不要做**：把 `min_qp` 和 `max_qp` 同时打开（方向相反，见 [§4.5](#45-qp-上下限)）；打开 `nvenc_weighted_prediction`（本档是 `preset = 5` + `tuning = hq`，恰好落在 SDK 点名"**会内部启用 B 帧**"的组合里，而加权预测与 B 帧互斥 —— 想试 WP 请把 `preset` 降到 2 并换 `ull`）。
+**不要做**：把 `min_qp` 和 `max_qp` 同时打开（方向相反，见 [§4.5](#45-qp-上下限)）。
 
 ---
 
@@ -697,7 +664,6 @@ nvenc_split_encode = driver_decides
 
 ```ini
 nvenc_preset = 3
-nvenc_tuning = ull
 nvenc_twopass = quarter_res
 nvenc_spatial_aq = disabled
 nvenc_temporal_aq = disabled
@@ -717,8 +683,8 @@ nvenc_realtime_hags = enabled
 - **局域网的瓶颈是延迟，不是带宽**：千兆链路上 100 Mbps 的流只占 10%。所以这一档**一个码率纪律的旋钮都不要松**，全部用来买"帧时间稳定"。
 - **`spatial_aq` / `temporal_aq` 都关**：不是不想要画质，而是它们占 CUDA 核心、并且会让帧时间方差变大（AQ 是逐帧分析工作，负载随画面内容波动）。**高刷场景下"每帧都一样快"比"平均画质更好"重要。** 如果 GPU 有富余（例如独显编码 + 弱 GPU 渲染），可以只开 `spatial_aq`。
 - **`split_encode = enabled`**：1080p/1440p **驱动不会自动开**（`driver_decides` 只在 ≥4K + P1–P4 才自动开），但手动强制能直接砍编码延迟 —— 这是本场景性价比最高的单项。前提：多 NVENC 单元 + 非 H.264。
-- **`preset = 3`**：留出编码时间余量给高帧率；`ull` 已经保证骨架正确。**局域网不要追高 preset** —— 省下的带宽在这里没用，多出的编码耗时直接变成延迟。
-- **`ldkfs = 0`**：交给驱动按 `ull` 配（通常是 1），避免自己制造关键帧尖峰。
+- **`preset = 3`**：留出编码时间余量给高帧率（延迟骨架本身已经固定为最低延迟档，preset 只买画质）。**局域网不要追高 preset** —— 省下的带宽在这里没用，多出的编码耗时直接变成延迟。
+- **`ldkfs = 0`**：交给驱动按当前档位配（超低延迟档下通常是 1），避免自己制造关键帧尖峰。
 
 **不要做**：`vbv_increase`、`max_qp`（局域网不需要它们，只会把 jitter 变大）、`preset = 7`（4K120 时编码耗时可能超过帧间隔）、**同时打开 `weighted_prediction`**（SDK 明文：split encode 与加权预测不能共存，见 [§6 避雷第 2 条](#6-避雷清单) —— 本档已经用 `split_encode` 换了延迟，就别再贪这一项）。
 
@@ -730,7 +696,6 @@ nvenc_realtime_hags = enabled
 
 ```ini
 nvenc_preset = 6
-nvenc_tuning = uhq
 nvenc_twopass = full_res
 nvenc_spatial_aq = enabled
 nvenc_aq_strength = 6
@@ -748,12 +713,12 @@ nvenc_split_encode = enabled
 
 **为什么这样配**：
 
-- **`tuning = uhq` 只有在这一档才用得上**：它要求 HEVC/AV1 + Turing 及更新，且它追求的是压缩效率而非延迟 —— 与"有线、带宽充裕、追求画质"正好匹配。**H.264 上写 `uhq` 是无效的**（[§4.1](#41-preset--tuning--twopass编码速度与质量档)）。
+- **画质靠 `preset` + `twopass` + 两个 AQ 换，不靠换延迟档**：本 fork 的编码会话固定为超低延迟档（`tuningInfo = NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY`），没有"换成高画质档"这个选项；在"有线、带宽充裕、追求画质"的场景里，能做的就是把算力全花在编码质量上。
 - **`temporal_aq` 终于可以开**：`vbv_increase = 120` 已经把单帧窗口撑宽，有时间 AQ 制造帧间波动的余地了。**这是"先开 VBV 再开 temporal_aq"的顺序**，反过来做只会抖动。
 - **`split_encode = enabled`**：4K 是本场景下最需要它的时候，且 4K 时驱动**本来**会自动开（`driver_decides` 即可），写成 `enabled` 只是更明确。
 - **`vbv_increase` 与 `max_qp` 的数值要按链路核算**：4K60 请求 150 Mbps（乐观口径，尚未扣 FEC 与音频）时单帧预算 ≈ 150 000 / 8 / 60 ≈ 312 kB，`vbv_increase = 120` 后 ≈ 687 kB → 该帧瞬时约 **330 Mbps**。2.5 GbE 才吃得下这种尖峰；**千兆链路上不要照搬这一档**。
 - **`weighted_prediction` 保持 `disabled` 是刻意的**：4K HDR 的过场动画/加载画面本来最吃这一项，但本档同时开了 `split_encode = enabled`，而 **SDK 明文规定 split encode 与加权预测不能共存**（[§4.6](#46-split_encode--h264_cavlc格式与并行)）。这里选择了"降延迟的 split"而不是"省码率的 WP" —— 你的链路是 2.5 GbE，码率不是瓶颈。
-- **代价明确**：这一档的延迟**不是最低的**（`uhq` + `preset 6` + `full_res` 两遍 + 两个 AQ 都在抢 SM）。如果你玩的是竞技游戏，请回到 [§8.3](#83-局域网游戏)。
+- **代价明确**：这一档的延迟**不是最低的**（`preset 6` + `full_res` 两遍 + 两个 AQ 都在抢 SM）。如果你玩的是竞技游戏，请回到 [§8.3](#83-局域网游戏)。
 
 ---
 
@@ -763,7 +728,6 @@ nvenc_split_encode = enabled
 
 ```ini
 nvenc_preset = 2
-nvenc_tuning = ull
 nvenc_twopass = disabled
 nvenc_spatial_aq = disabled
 nvenc_temporal_aq = disabled
@@ -787,14 +751,14 @@ nvenc_latency_over_power = enabled
 
 ### 8.6 场景速查
 
-| 场景 | preset | tuning | twopass | spatial_aq | temporal_aq | nonref_p | vbv↑ | min_qp | max_qp | split |
-|------|:------:|:------:|:-------:|:----------:|:-----------:|:--------:|:----:|:------:|:------:|:-----:|
-| [§8.0 通用基线](#80-通用安全基线) | 1 | ull | ¼res | ✗ | ✗ | ✗ | 0 | ✗ | ✗ | auto |
-| [§8.1 弱网](#81-弱网场景公网与移动网络) | 4 | ull | ¼res | ✓8 | ✗ | ✗ | 0 | **✓26/30** | ✗ | ✗ |
-| [§8.2 办公](#82-办公与桌面生产力) | 5 | **hq** | full | ✓10 | ✗ | ✓ | 50 | ✗ | **✓30/36/60** | auto |
-| [§8.3 局域网游戏](#83-局域网游戏) | 3 | ull | ¼res | ✗ | ✗ | ✗ | 0 | ✗ | ✗ | **✓** |
-| [§8.4 4K HDR](#84-4k-hdr-高质量有线串流) | 6 | **uhq** | full | ✓6 | **✓** | ✓ | 120 | ✗ | ✓28/34/56 | **✓** |
-| [§8.5 笔记本](#85-笔记本与混合输出) | 2 | ull | ✗ | ✗ | ✗ | ✗ | 0 | ✗ | ✗ | auto |
+| 场景 | preset | twopass | spatial_aq | temporal_aq | nonref_p | vbv↑ | min_qp | max_qp | split |
+|------|:------:|:-------:|:----------:|:-----------:|:--------:|:----:|:------:|:------:|:-----:|
+| [§8.0 通用基线](#80-通用安全基线) | 1 | ¼res | ✗ | ✗ | ✗ | 0 | ✗ | ✗ | auto |
+| [§8.1 弱网](#81-弱网场景公网与移动网络) | 4 | ¼res | ✓8 | ✗ | ✗ | 0 | **✓26/30** | ✗ | ✗ |
+| [§8.2 办公](#82-办公与桌面生产力) | 5 | full | ✓10 | ✗ | ✓ | 50 | ✗ | **✓30/36/60** | auto |
+| [§8.3 局域网游戏](#83-局域网游戏) | 3 | ¼res | ✗ | ✗ | ✗ | 0 | ✗ | ✗ | **✓** |
+| [§8.4 4K HDR](#84-4k-hdr-高质量有线串流) | 6 | full | ✓6 | **✓** | ✓ | 120 | ✗ | ✓28/34/56 | **✓** |
+| [§8.5 笔记本](#85-笔记本与混合输出) | 2 | ✗ | ✗ | ✗ | ✗ | 0 | ✗ | ✗ | auto |
 
 > **规律**：**丢包多的场景 → 压码率波动（min_qp / 关一切 AQ）；带宽够的场景 → 放码率波动（max_qp + vbv↑ + AQ）。两者永不共存。**
 
@@ -802,20 +766,19 @@ nvenc_latency_over_power = enabled
 
 ## 9. 本 fork 新增键一览
 
-上游 `LizardByte/Sunshine` 的 `master` 没有以下 14 个键（其余 9 个为上游已有）。提到"上游没有这个键"时以此为准。
+上游 `LizardByte/Sunshine` 的 `master` 没有以下 13 个键（其余 9 个为上游已有）。提到"上游没有这个键"时以此为准。
 
 | ⚠️ 本 fork 新增 | 上游已有 |
 |----------------|---------|
-| `nvenc_tuning` | `nvenc_preset` |
-| `nvenc_ldkfs` | `nvenc_twopass` |
-| `nvenc_temporal_aq` | `nvenc_spatial_aq` |
-| `nvenc_aq_strength` | `nvenc_vbv_increase` |
-| `nvenc_nonref_p` | `nvenc_h264_cavlc` |
-| `nvenc_weighted_prediction` | `nvenc_split_encode` |
-| `nvenc_enable_min_qp` | `nvenc_realtime_hags` |
-| `nvenc_min_qp_h264` / `_hevc` / `_av1` | `nvenc_opengl_vulkan_on_dxgi` |
-| `nvenc_enable_max_qp` | `nvenc_latency_over_power` |
-| `nvenc_max_qp_h264` / `_hevc` / `_av1` | |
+| `nvenc_ldkfs` | `nvenc_preset` |
+| `nvenc_temporal_aq` | `nvenc_twopass` |
+| `nvenc_aq_strength` | `nvenc_spatial_aq` |
+| `nvenc_nonref_p` | `nvenc_vbv_increase` |
+| `nvenc_weighted_prediction` | `nvenc_h264_cavlc` |
+| `nvenc_enable_min_qp` | `nvenc_split_encode` |
+| `nvenc_min_qp_h264` / `_hevc` / `_av1` | `nvenc_realtime_hags` |
+| `nvenc_enable_max_qp` | `nvenc_opengl_vulkan_on_dxgi` |
+| `nvenc_max_qp_h264` / `_hevc` / `_av1` | `nvenc_latency_over_power` |
 
 > 上游若把这些键合并过来，**行为差异请以 [§1.2](#12-关-2windows-与-linux-不是同一套实现) 的路径表为准**，尤其注意 Linux 上 12 个键（QP 组 8 个 + `split_encode` + 三个 Windows 平台键）无效或不存在。
 
@@ -829,7 +792,6 @@ nvenc_latency_over_power = enabled
 | 码控（CBR / VBV / 两遍 / AQ / min-max QP） | [src/nvenc/nvenc_base.cpp:304](../../../src/nvenc/nvenc_base.cpp#L304) |
 | 参考帧与 `list0` 限制 | [src/nvenc/nvenc_base.cpp:357](../../../src/nvenc/nvenc_base.cpp#L357) |
 | 帧切分编码 | [src/nvenc/nvenc_base.cpp:278](../../../src/nvenc/nvenc_base.cpp#L278) |
-| `tuning` → SDK 枚举（含 H.264 UHQ 回退） | [src/nvenc/nvenc_base.cpp:213](../../../src/nvenc/nvenc_base.cpp#L213) |
 | 编码器创建与日志（自检入口） | [src/nvenc/nvenc_base.cpp:660](../../../src/nvenc/nvenc_base.cpp#L660) |
 | FFmpeg 选项表（Linux 路径） | [src/video.cpp:788](../../../src/video.cpp#L788) |
 | FFmpeg 路径的 VBV 放大 | [src/video.cpp:2261](../../../src/video.cpp#L2261) |

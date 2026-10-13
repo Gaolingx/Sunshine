@@ -89,7 +89,7 @@
 | 参数总览：哪些键存在、默认值、取值范围 | [09 §2 参数总表](./09-NVENC编码参数详解与场景调优.md#2-参数总表) |
 | 哪些值是**硬编码**、配置改不了 | [09 §3 Sunshine 故意锁死的项](./09-NVENC编码参数详解与场景调优.md#3-sunshine-故意锁死的项nvenc_config-里没有对应键) |
 | 为什么"改了没反应"：四道关 | [09 §1 生效边界](./09-NVENC编码参数详解与场景调优.md#1-生效边界一个参数要过四道关)（1.1 校验吞掉非法值 / 1.2 Windows 与 Linux 两套实现 / 1.3 能力位静默失效 / 1.4 客户端提供的量） |
-| `preset` / `tuning` / `twopass` 对延迟与画质的作用 | [09 §4.1](./09-NVENC编码参数详解与场景调优.md#41-preset--tuning--twopass编码速度与质量档) |
+| `preset` / `twopass` 对延迟与画质的作用 | [09 §4.1](./09-NVENC编码参数详解与场景调优.md#41-preset--twopass编码速度与质量档) |
 | 自适应量化三键（`spatial_aq` / `aq_strength` / `temporal_aq`） | [09 §4.2](./09-NVENC编码参数详解与场景调优.md#42-spatial_aq--aq_strength--temporal_aq自适应量化) |
 | 帧类型与参考行为（`nonref_p` / `weighted_prediction` / `ldkfs`） | [09 §4.3](./09-NVENC编码参数详解与场景调优.md#43-nonref_p--weighted_prediction--ldkfs帧类型与参考行为) |
 | `vbv_increase`：唯一的"瞬时码率油门" | [09 §4.4](./09-NVENC编码参数详解与场景调优.md#44-vbv_increase码率窗口) |
