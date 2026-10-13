@@ -53,7 +53,7 @@ sunshine.conf 里的 nvenc_xxx
 | 键 | Windows 原生 SDK | Linux FFmpeg | 备注 |
 |----|:----------------:|:------------:|------|
 | `nvenc_preset` / `nvenc_tuning` / `nvenc_twopass` | ✓ | ✓ | 经 `nv_legacy` 镜像成 `preset` / `tune` / `multipass` |
-| `nvenc_spatial_aq` / `nvenc_temporal_aq` / `nvenc_aq_strength` | ✓ | ✓ | `spatial-aq` / `temporal-aq` / `aq-strength` |
+| `nvenc_spatial_aq` / `nvenc_temporal_aq` / `nvenc_aq_strength` | ✓ | ✓ | `spatial-aq` / `temporal-aq` / `aq-strength`；⚠️ Linux 上该值范围是 1–15，默认 0 会越界导致建流失败 |
 | `nvenc_nonref_p` / `nvenc_weighted_prediction` / `nvenc_ldkfs` | ✓ | ✓ | `nonref_p` / `weighted_pred` / `ldkfs` |
 | `nvenc_vbv_increase` | ✓（**有**能力位检查） | ✓（**无**能力位检查） | 见 [§7.1](#71-放大机制一vbv-放大单帧窗口被撑大) |
 | `nvenc_enable_min_qp` / `nvenc_min_qp_*` | ✓ | **✗ 完全不生效** | FFmpeg 选项表里没有 `qpmin` |
@@ -62,20 +62,22 @@ sunshine.conf 里的 nvenc_xxx
 | `nvenc_h264_cavlc` | ✓ | ✓ | `coder` |
 | `nvenc_realtime_hags` / `nvenc_opengl_vulkan_on_dxgi` / `nvenc_latency_over_power` | ✓ | — | Windows 平台键，非编码参数 |
 
-> ⚠️ **Linux 用户必看**：`nvenc_enable_min_qp` / `nvenc_enable_max_qp` 这两组共 8 个键在 Linux 上**能被解析、能通过校验、日志里也不会报错，但一个字节都不会传到编码器**。这是纯粹的"静默无操作"。
+> ⚠️ **Linux 用户注意两点**：① `nvenc_enable_min_qp` / `nvenc_enable_max_qp` 这两组共 8 个键**能被解析、能通过校验、日志里也不报错，但一个字节都不会传到编码器**（纯静默无操作）；② `nvenc_aq_strength` 在 Linux 上必须在 **1–15** 之间，默认的 0 越界会让编码器直接起不来（[§4.2](#42-spatial_aq--aq_strength--temporal_aq自适应量化)）。
 
 Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](../../../src/nvenc/nvenc_base.cpp#L304) 起的 `configure_rate_control()`；Linux 侧的对应实现（含 VBV 放大）在 [src/video.cpp:2261](../../../src/video.cpp#L2261)。**同一个键在两条路径上的生效条件并不一致**，这是排查"Windows 有效、Linux 无效"类问题的起点。
 
-### 1.3 关 3：能力位导致的静默失效（四个真实例子）
+### 1.3 关 3：能力位不满足时的表现
 
-| 项 | 能力位 | 不支持时的表现 |
-|----|--------|---------------|
-| `nvenc_vbv_increase` | `NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE` | ★ **整段 VBV 设置被跳过** → 键彻底无效，且日志里连 `vbv+N` 后缀都不打印 |
-| `nvenc_temporal_aq` | `NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ` | 打一条 `gpu doesn't support temporal AQ` warning 后忽略 |
-| `nvenc_weighted_prediction` | `NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION` | 静默不设置 `enableWeightedPrediction` |
-| `nvenc_tuning = uhq`（H.264） | 语义不支持（非能力位） | 原生路径打 warning 回退 `hq`；FFmpeg 路径**静默**把 `tune` 换掉 |
+| 项 | 能力位 | Windows 原生 SDK | Linux FFmpeg |
+|----|--------|-----------------|--------------|
+| `nvenc_vbv_increase` | `NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE` | ★ **整段 VBV 设置被跳过** → 键彻底无效，且日志里连 `vbv+N` 后缀都不打印 | 不做能力位检查，直接生效 |
+| `nvenc_temporal_aq` | `NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ` | 打一条 `gpu doesn't support temporal AQ` warning 后忽略 | **编码器初始化失败**（直接报错返回，不降级） |
+| `nvenc_weighted_prediction` | `NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION` | 静默不设置 `enableWeightedPrediction` | **编码器初始化失败**（同上） |
+| `nvenc_tuning = uhq`（H.264） | 语义不支持（非能力位） | 打 warning 回退 `hq` | **静默**把 `tune` 换掉 |
 
-> ★ `nvenc_vbv_increase` 那一行是最贵的坑：它把"单帧 VBV"整块（[src/nvenc/nvenc_base.cpp:342](../../../src/nvenc/nvenc_base.cpp#L342)）放在能力位判断里面，所以**老 GPU 上调这个键，看到的现象是"完全没变化"，而不是"画质变好了"**。
+> ★ `nvenc_vbv_increase` 那一行是最贵的坑：它把"单帧 VBV"整块放在能力位判断里面，所以**老 GPU 上调这个键，看到的现象是"完全没变化"，而不是"画质变好了"**。
+
+> ⚠️ **"静默失效"只是 Windows 的说法。** Linux 走 FFmpeg，对不满足的能力位是**直接报错返回**而不是降级，且 Sunshine 对 nvenc 不做重试 —— 所以 Linux 上这类键"要么完全生效、要么整个编码器起不来"。**排查顺序：先确认日志里编码器建起来了，再谈参数效果。**
 
 ### 1.4 关 4：来自客户端、配置里改不了的量
 
@@ -216,9 +218,10 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
 - **是什么**：AQ 的强度。**0 表示"用驱动的默认强度"，不是"关掉 AQ"**。
 - **为什么需要设**：驱动默认强度是为"通用场景"选的。桌面/UI 内容需要更弱的 AQ（过强会让文字边缘被"抹平"）；电影/游戏远景需要更强的 AQ。
 - **改了有什么效果**：强度 ↑ → 平坦区域更干净、纹理区更糊；强度 ↓ → 纹理更锐、平坦区域更容易出色带。
-- **⚠️ 两个坑**：
+- **⚠️ 三个坑**：
   1. **只写 `nvenc_aq_strength` 而不开 `nvenc_spatial_aq` / `nvenc_temporal_aq`，完全没有效果** —— 但日志里照样会打印 `aq-strength=9`（[src/nvenc/nvenc_base.cpp:633](../../../src/nvenc/nvenc_base.cpp#L633)），非常容易误判成"已经生效"。
   2. 该字段在 SDK 里是 **4 bit**，代码用 `std::min(..., 15)` 夹紧（[:331](../../../src/nvenc/nvenc_base.cpp#L331)）。配置校验的范围也是 0–15，两层一致，所以这里不会出问题 —— 但不要以为"填 30 会变成 15"，校验层会先把整项丢掉。
+  3. **⚠️ Linux 上必须给 1–15。** FFmpeg 里 `aq-strength` 的合法范围是 1–15，默认的 0 越界；这项无论是否开 AQ 都会被下发，所以 0 会让编码器直接建不起来 —— 不想要 AQ 就填 `1`。
 
 #### `nvenc_temporal_aq` ⚠️（默认 `disabled`）
 
@@ -250,7 +253,7 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
   - **与 B 帧冲突（SDK 原文）**：`enableWeightedPrediction` 的注释写明 *"Not supported if encode session is configured for B-Frames (i.e. frameIntervalP > 1 **or preset >= P3 when tuningInfo = HIGH_QUALITY or LOSSLESS**)"*。Sunshine 把 `frameIntervalP` 硬编码为 1（[:310](../../../src/nvenc/nvenc_base.cpp#L310)），这条在最终会话里被压掉了；但 **SDK 把"P3 以上 + HQ 档"单独列为构成 B 帧的条件**，说明这半条要由驱动来解释 preset。保守做法：开了加权预测就**别同时用 `hq` / `uhq` 档 + P3 以上**。
   - **与自适应量化冲突**：Sunshine 的官方键文档写 *"it conflicts with B frames and with adaptive quantization"*，但 SDK 头文件**只有 B 帧那一条**，没有 AQ 互斥的条文。也就是说这一条的后果**以驱动实际行为为准**，而 Sunshine **不做任何交叉校验** —— 你同时开两者不会收到报错，日志里 `weighted-prediction` 和 `spatial-aq` 会并排出现，看不出谁生效。**要加权预测就别要 AQ，二选一。**
   - **与 split encode 冲突（SDK 明文）**：`splitEncodeMode` 的注释写 *"Not supported if any of the following features: weighted prediction, ..."*，详见 [§4.6](#46-split_encode--h264_cavlc格式与并行)。
-  - **Linux 差异**：`weighted_pred` 在 FFmpeg 路径上对 **AV1 / HEVC / H.264 三种编码器都被写入**（[video.cpp:796](../../../src/video.cpp#L796)、[:823](../../../src/video.cpp#L823)、[:861](../../../src/video.cpp#L861)），与"只有 H.264 支持"的原生路径口径不一致，实际是否被采纳取决于 FFmpeg/驱动 —— 所以同一份配置在 Windows/Linux 上的效果可能不同。
+  - **Linux 差异（不是"取决于驱动"，是硬失败）**：`weighted_pred` 在 FFmpeg 路径上对 **AV1 / HEVC / H.264 三种编码器都会被写入**（[video.cpp:796](../../../src/video.cpp#L796)、[:823](../../../src/video.cpp#L823)、[:861](../../../src/video.cpp#L861)），而 FFmpeg 在 `weighted_pred > 0` 且能力位 `NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION` 查询失败时**直接返回 `AVERROR(ENOSYS)`**（[nvenc.c:509](../../../third-party/build-deps/third-party/FFmpeg/FFmpeg/libavcodec/nvenc.c#L509)），且 Sunshine 的 nvenc `fallback_options` 是空的（无重试）→ **编码器直接起不来**。能力位按 codec guid 查询，所以"只有 H.264 支持加权预测"这个原生口径意味着 **Linux 上在 HEVC/AV1 开它很可能是初始化失败，而不是被忽略** → **建议只在 H.264 下开这个键**。
 - **代价**：占用 CUDA 核心。
 
 #### `nvenc_ldkfs` ⚠️（0–10，默认 0）
@@ -275,7 +278,7 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
   - **延迟**：本身不增加平均延迟（CBR 平均目标不变），但**增加瞬时突发**。
   - **码率使用**：峰值 = `单帧预算 × (1 + vbv_increase/100)`。
 - **⚠️ 上限为什么是 400**：400% 也只是"一帧 + 四帧"，即 **5 倍单帧预算**。它**做不到** FFmpeg 那种"多秒缓冲"的 VBR 效果 —— `nvenc_vbv_increase` 是"帧级余量"，不是"秒级余量"。想靠它替代 VBR 是方向性错误。
-- **⚠️ 静默失效**：能力位 `NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE` 不支持时整段跳过（[§1.3](#13-关-3能力位导致的静默失效四个真实例子)）。
+- **⚠️ 静默失效**：能力位 `NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE` 不支持时整段跳过（[§1.3](#13-关-3能力位不满足时的表现)）。
 - **⚠️ Linux 差异**：FFmpeg 路径（[src/video.cpp:2261](../../../src/video.cpp#L2261)）**不做能力位检查**，直接往 `rc_buffer_size` 上加。同一份配置在两条路径上的实际窗口可能不同。
 
 ### 4.5 QP 上下限
@@ -291,7 +294,9 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
   - 向上调：码率曲线更平稳（对网络友好）；**静态画面（比如办公桌面的纯色背景）会开始有可见的块状/色带**。
   - 向下调（趋向 0）：等于关闭，编码器重新获得"烧比特买画质"的自由。
   - 对峰值码率：**降低**（这是它和 `max_qp` 最重要的区别）。
-- **默认值差别的原因**：H.264 的 QP 标度与 HEVC/AV1 不同，同样"视觉效果"对应的数值不同，所以默认值给了 19 与 23。
+- **默认值差别的原因**：H.264 与 HEVC **共用同一个 0–51 标度**；**AV1 用的是 0–255 的 qindex**，是另一把尺子，所以默认值给了 23。更要注意这三个默认值在**各自标度上的位置完全不同**：19/51 ≈ 37%、23/51 ≈ 45%、23/255 ≈ **9%** —— **`min_qp_av1` 的默认值几乎不构成限制**（详见 [§4.5.1](#451-av1-的-qp-标度不可按数字换算)）。
+- **⚠️ 调过头会"欠码"**：`min_qp` 是硬下限，编码器算出更低的 QP 也没用。把三档推到 40+，会让码率**无论内容多难都上不去** —— 实测 20 Mbps 目标下 `qmin=40 qmax=51` 只跑出 **1.98 Mbps（0.10×）**，表现是"网络很空闲但画面就是糊"。
+- **⚠️ 别把 min/max 写反**：配置层**没有** `min ≤ max` 的交叉校验（[src/config.cpp:1644](../../../src/config.cpp#L1644) 起八项各自独立检查），反着写（`min_qp=30` + `max_qp=25`）会被驱动照单接受，结果是码率**既到不了目标又剧烈抖动** —— 实测均值 3.83 Mbps（0.19×），单帧最大 414 kB ≈ **9.9×** 单帧预算。
 - **⚠️ Linux 上不生效**（见 [§1.2](#12-关-2windows-与-linux-不是同一套实现)）。
 
 #### `nvenc_enable_max_qp` + `nvenc_max_qp_{h264,hevc,av1}`（默认关；51 / 51 / 255）
@@ -303,10 +308,62 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
   - 对峰值码率：**升高**（可能非常显著，见 [§7.2](#72-放大机制二max_qp-让编码器放弃码率约束)）。
   - 官方 warning：**Can lead to network packet loss**。
 - **⚠️ 默认值是"无操作"**：51（H.264/HEVC）/255（AV1）已是各自标度下最差质量，"打开开关 + 保持默认"= 什么都没改。
-- **⚠️ 两套标度不要混**：HEVC 写 `60` 会被校验拒绝（范围 0–51），AV1 写 `60` 才是有效值。
+- **⚠️ 两套标度不要混（本 fork 最容易被误用的一组键）**：真正的坑有两个方向，**两个方向都会让实际力度偏离预期**：
+  - **照数字抄**（`max_qp_h264 = 38`，于是 `max_qp_av1 = 38`）：38 只占 0–255 的 15%，实测却等价于 H.264 的 **QP 29–30**，比你以为的"38"**严得多** → **超发比预期更狠**。
+  - **按 ×5 折算**（38 × 5 = 190，而等价值只有 **≈142**）：上限**比预期松得多**，极端情况下几乎不再约束，等于把保险撤掉。
+  另注意：`60` 在 AV1 上合法且"相当严"，而 H.264/HEVC 写 `60` 会被校验直接拒绝（范围 0–51）。换算表与实测见 [§4.5.1](#451-av1-的-qp-标度不可按数字换算)。
 - **⚠️ Linux 上不生效**（见 [§1.2](#12-关-2windows-与-linux-不是同一套实现)）。
 
-> **min / max QP 的分工一句话**：`min_qp` 是**刹车**（压峰值码率，牺牲简单帧），`max_qp` 是**保险**（压难帧的糊，牺牲码率纪律）。**两者方向相反，不要为了"画面更好"同时开。**
+> **min / max QP 的分工一句话**：`min_qp` 是**刹车**（压峰值码率，牺牲简单帧），`max_qp` 是**保险**（压难帧的糊，牺牲码率纪律）。**两者方向相反，不要为了"画面更好"同时开。** 另外记住：**刹车和保险的力度都取决于数值在各自标度上的位置**，见下节。
+
+#### 4.5.1 AV1 的 QP 标度：不可按数字换算
+
+**结论先说**：H.264 与 HEVC 共用 **0–51** 标度（数字可互相参考，HEVC 同数值略更狠）；**AV1 是 0–255 的 qindex，是完全另一把尺子**。"H.264 用 38，AV1 也填 38"是错的，而且是**错向"更严"**的方向 —— 超发更厉害。
+
+**为什么不能按比例换算**：QP 与量化步长是**指数**关系（约 `2^((QP-4)/6)`），而 NVENC 的 AV1 qindex 并非把 0–51 线性拉长：**低段步子细、高段步子粗**。于是"×5"这条常见经验**只在高端近似成立**：
+
+| H.264/HEVC QP | 28 | 34 | 38 | 42 | 47 | 51 |
+|---|---|---|---|---|---|---|
+| 字节等价的 AV1 qindex | **≈28** | **≈100** | **≈142** | **≈178** | **≈215** | **≈242** |
+| 比值（AV1 : H.264） | 1.0 | 2.9 | 3.7 | 4.2 | 4.6 | 4.7 |
+
+（若用 ×5 去换算 H.264 的 `34`，会写成 `170`，而等价值只有 ≈100 → **上限会比你以为的松得多**。）
+
+**实测依据**（同片源、`rc=constqp`、同 preset，平均字节/帧，720p）：
+
+困难内容（逐帧随机噪声，最坏情况）：
+
+| H.264 QP | 19 | 23 | 28 | 34 | 38 | 42 | 47 | 51 |
+|---|---|---|---|---|---|---|---|---|
+| H.264 B/帧 | 45651 | 37555 | 28049 | 18765 | 16087 | 13320 | 10428 | 8215 |
+| HEVC B/帧 | 27312 | 24979 | 21697 | 18135 | 15980 | 13061 | 10152 | 7959 |
+
+| AV1 qindex | 23 | 51 | 76 | 92 | 102 | 128 | 138 | 152 | 176 | 204 | 230 | 255 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AV1 B/帧 | 29200 | 22784 | 20259 | 19192 | 18644 | 17120 | 16385 | 15356 | 13511 | 11359 | 9258 | 7270 |
+
+简单内容（渐变 + 移动方块）：
+
+| H.264 QP | 19 | 23 | 28 | 34 | 38 | 42 | 47 | 51 |
+|---|---|---|---|---|---|---|---|---|
+| H.264 B/帧 | 255 | 209 | 160 | 121 | 105 | 112 | 106 | 106 |
+
+| AV1 qindex | 23 | 51 | 76 | 92 | 102 | 128 | 138 | 152 | 176 | 204 | 230 | 255 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AV1 B/帧 | 890 | 292 | 234 | 181 | 197 | 125 | 119 | 136 | 140 | 96 | 85 | 89 |
+
+两个直接推论：
+
+- **AV1 的可用下限段（qindex ≈23）在简单内容上比 H.264 的 QP 19 还精细**（890 B vs 255 B）—— **AV1 低段基本是留给近无损场景的**，把 H.264 的低数值抄过去没有意义。
+- **AV1 的最粗糙端（255）比 H.264 的最粗糙端（51）还要狠**（困难内容 7270 B vs 8215 B；简单内容 89 B vs 106 B）。所以**上限侧的默认值是等价的**（都是 100% 标度），**下限侧不是**。
+
+**实践规则（三条）**：
+
+1. **禁止换算，只认实测。** 改 AV1 的 QP 上下限时，用 [§5](#5-自检怎么确认参数真的生效了) 的 `qpmax=` 后缀确认已下发，再看帧大小/画质收敛。
+2. **粗粒度起步值**：想要"H.264 38 的效果"→ AV1 给 **≈140**；想要"H.264 47"→ AV1 给 **≈215**。数字只能当起点。
+3. **注意默认值位置**：`min_qp_h264 = 19`（标度 37%）、`min_qp_hevc = 23`（45%）、`min_qp_av1 = 23`（**9%**）。所以"打开 `nvenc_enable_min_qp` 但不动数值"在 **AV1 上几乎等于没设**。
+
+> ⚠️ 这也解释了本文 [§8.2](#82-办公与桌面生产力) / [§8.4](#84-4k-hdr-高质量有线串流) 的 `max_qp_av1 = 60 / 56` 为什么要**重新实测定标**：按上表折算，`60` ≈ H.264 的 **30.5**（同组 `max_qp_hevc = 36` 的等位置本该 ≈118）、`56` ≈ **30**（同组 `max_qp_hevc = 34` 本该 ≈100）—— 两处 AV1 值都比同组 HEVC 值**严得多**，而"上限越严 → 超发越狠"，与配方"H.264 30 / HEVC 36 / AV1 60 表示同一严重程度"的书写意图不符。
 
 ### 4.6 `split_encode` / `h264_cavlc`：格式与并行
 
@@ -405,11 +462,11 @@ NvEnc: requested encoded frame size 166.7 kB
 |:-:|:-:|------|------|------|
 | 1 | A | `nvenc_weighted_prediction = enabled` + `nvenc_spatial_aq = enabled` | 二者之一被驱动忽略，且**配置层不会报错**：日志里 `weighted-prediction` 与 `spatial-aq` 并排出现，看不出谁生效 | Sunshine 官方键文档写 *"conflicts with adaptive quantization"*，但 SDK 头文件**只有 B 帧那一半**；Sunshine 不做交叉校验 → 后果以驱动实际行为为准（[§4.3](#43-nonref_p--weighted_prediction--ldkfs帧类型与参考行为)） |
 | 2 | A | `nvenc_split_encode = enabled` + `nvenc_weighted_prediction = enabled` | **两个开关同时失效**，且没有任何报错 | SDK 明文：`splitEncodeMode` *"Not supported if any of the following features: weighted prediction, alpha layer encoding, subframe mode, ..."* → 这是"两个看起来无关的开关互相否决"的典型（[§4.6](#46-split_encode--h264_cavlc格式与并行)） |
-| 3 | A | `nvenc_min_qp_*` > `nvenc_max_qp_*`（如 min 40 / max 30） | 初始化失败或 QP 限制被整体忽略，排障极难 | ✅ **Sunshine 的校验不做交叉检查**（[src/config.cpp:1635](../../../src/config.cpp#L1635) 每键独立校验），错配直接穿透到驱动 |
+| 3 | A | `nvenc_min_qp_*` > `nvenc_max_qp_*`（如 min 40 / max 30） | **驱动照单接受**：码率**既到不了目标又剧烈抖动** —— 实测均值 0.19× 目标，单帧 9.9× 预算，排障极难 | ✅ **Sunshine 的校验不做交叉检查**（[src/config.cpp:1635](../../../src/config.cpp#L1635) 每键独立校验），错配直接穿透到驱动（[§4.5](#45-qp-上下限)） |
 | 4 | A | `nvenc_tuning = uhq` + H.264 | Windows：警告后回退 `hq`；Linux：**静默**回退 `hq` | H.264 不支持 UHQ 档；两条路径处理方式不一致（[:222](../../../src/nvenc/nvenc_base.cpp#L222) vs. [video.cpp:849](../../../src/video.cpp#L849)） |
-| 5 | A | 在 Linux 上设 `nvenc_enable_min_qp` / `nvenc_max_qp` 及数值 | **完全无效果且无任何提示** | FFmpeg 选项表里没有 `qpmin`/`qpmax`；`nv_legacy` 也不携带这两个字段 |
+| 5 | A | 在 Linux 上设 `nvenc_enable_min_qp` / `nvenc_max_qp` 及数值 | **完全无效果且无任何提示** | ① FFmpeg 选项表里没有 `qpmin`/`qpmax`，`nv_legacy` 也不携带这两个字段；② **即便补上也没用** —— CBR 下 FFmpeg 根本不映射 QP（`nvenc_override_rate_control` 的 `case NV_ENC_PARAMS_RC_CBR: break;`，[nvenc.c:946](../../../third-party/build-deps/third-party/FFmpeg/FFmpeg/libavcodec/nvenc.c#L946)），只有 `set_vbr()` 会映射 |
 | 6 | A | `nvenc_enable_max_qp = enabled`（**不配** `nvenc_vbv_increase`） | 单帧 VBV 不再被遵守 → 难帧无限超发 → 分片丢弃/重传/请求 IDR（正反馈，见 [§7.2](#72-放大机制二max_qp-让编码器放弃码率约束)） | 官方 warning 原文：capping the QP … **lets the encoder overshoot the single frame VBV/HRD limit** |
-| 7 | A | `nvenc_enable_max_qp = enabled` 但 `max_qp` 保持默认（51/51/255） | **等同于没开** | 默认值已是各标度最差质量 |
+| 7 | A | `nvenc_enable_max_qp = enabled` 但 `max_qp` 保持默认（51/51/255） | **等同于没开** | 上限侧三个默认值都是各自标度的 100%，语义相互等价。⚠️ **下限侧不是这样**：`min_qp_av1 = 23` 只占 0–255 的 **9%**，而 `min_qp_h264/hevc = 19/23` 占 **37%/45%** —— "打开开关但用默认值"在 AV1 上近乎空操作（[§4.5.1](#451-av1-的-qp-标度不可按数字换算)） |
 | 8 | B | `nvenc_vbv_increase = 400` + 弱网/无线 | 单帧尖峰 = 5× 平均码率 → 交换机/路由器队列溢出 → 整队丢弃 | [05 §5](./05-FEC-重传-丢帧与心跳.md#5-丢帧没有显式策略只有队列覆盖) 的 `drop_oldest` 整队清空；官方 warning：Can lead to network packet loss |
 | 9 | B | `nvenc_temporal_aq = enabled` + `nvenc_vbv_increase = 0` | 画质抖动，收益为负 | 源码注释：**may conflict with strict CBR**；单帧 VBV 下没有余地容纳它重排的比特 |
 | 10 | B | `nvenc_twopass = full_res` + GPU 满载游戏 | **游戏掉帧**（不是串流掉帧） | 两遍编码占 CUDA 核心，与游戏抢 SM |
@@ -420,7 +477,7 @@ NvEnc: requested encoded frame size 166.7 kB
 | 15 | B | `nvenc_preset = 7` + `nvenc_tuning = uhq` + 4K120 | 单帧编码时间有**超过帧间隔（8.33 ms）的风险** → 编码器吞吐成为延迟瓶颈 | 与码率无关的**吞吐型延迟**，且会被误诊为"网络卡" |
 | 16 | B | `nvenc_h264_cavlc = enabled` | **纯损失 5–15% 压缩率**，零延迟收益 | NVENC 的 CABAC 是硬件流水线，不增加延迟；源码注释："not relevant, here for historical reasons" |
 | 17 | B | `nvenc_split_encode = enabled` + H.264 或单 NVENC 单元 GPU 或 Linux | 无效果（Windows 上静默；Linux 上更彻底地无效） | `videoFormat <= 0` 直接 return；`NUM_ENCODER_ENGINES <= 1` 直接 return；FFmpeg 路径无对应选项 |
-| 18 | C | 只写 `nvenc_aq_strength`，不设 `nvenc_spatial_aq` / `nvenc_temporal_aq` | **无效果**，但日志会打印 `aq-strength=N` | 强度字段单独存在无意义，容易误判 |
+| 18 | C（Windows）/ **A（Linux）** | 只写 `nvenc_aq_strength`，不设 `nvenc_spatial_aq` / `nvenc_temporal_aq` | Windows：**无效果**，但日志会打印 `aq-strength=N`；**Linux：编码器直接起不来**（默认值 0 越界，该项在 FFmpeg 里是 1–15） | 强度字段单独存在无意义；Linux 上则是"以为在调 AQ、结果建流失败"（[§1.2](#12-关-2windows-与-linux-不是同一套实现)） |
 | 19 | C | `nvenc_vbv_increase` 在能力位不支持的 GPU 上 | 无效果，且日志连 `vbv+N` 都不打印 | 整段 VBV 代码在 `NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE` 判断内 |
 | 20 | C | `nvenc_tuning = uhq` 在 Turing 之前的 GPU（Pascal / Volta）上 | 驱动不认这一档 → 初始化失败或由驱动回退，取决于驱动版本 | Sunshine **没有任何 GPU 代数检查**，只对 H.264 做了回退（[`tuning_info_from_config()`](../../../src/nvenc/nvenc_base.cpp#L213)）；UHQ 是 Turing（第 5 代 NVENC）才引入的档位 |
 | 21 | C | `nvenc_twopass` / `nvenc_split_encode` 写错枚举值 | 静默降级到默认（`quarter_resolution` / `driver_decides`）并打 warning | 枚举解析的默认分支行为 |
@@ -440,8 +497,11 @@ NvEnc: requested encoded frame size 166.7 kB
 这一节回答"哪些参数错误调整会让码率失控"。先建立一个基线事实：
 
 > **`averageBitRate` 严格等于 `client_config.bitrate * 1000`，且 `vbvBufferSize` 严格等于"一帧的比特数"。**（[:341](../../../src/nvenc/nvenc_base.cpp#L341)、[:343](../../../src/nvenc/nvenc_base.cpp#L343)）
-> 也就是说，**在默认配置下，Sunshine 的 NVENC 输出在最坏情况下也不会超过"平均码率 + 一帧的余量"** —— 这就是它默认的码率纪律。
-> 所谓"失控"，全部来自**人为松开这两个约束**，加上**几个把请求值本身放大的机制**。
+> **平均码率这一条是严格的**：实测（20 Mbps 目标、1080p60、40 帧最坏情况噪声内容）平均值就是 20.00 Mbps，一帧不多。
+> 但**"最坏不超过平均 + 一帧"只对 P 帧成立**：同一实测里单帧最大 **123 kB ≈ 3.0× 单帧预算**（预算 41.7 kB），典型来源是 IDR / 切屏那一帧。因为 VBV 缓冲只有一帧，这 3× 是**真实上链路的突发**，之后由编码器在数帧内偿还。
+> 还有两个容易误解的事实：
+> - **静态画面不会省下码率存款**：CBR 会把每帧填到预算，实测静止内容依然是 20.00 Mbps（且填充数据开/关对码流**逐字节相同**）。
+> - 所谓"失控"（超过 3× 的量级），全部来自**人为松开这两个约束**，加上下面几个把请求值本身放大的机制。
 
 ### 7.1 放大机制一：VBV 放大（单帧窗口被撑大）
 
@@ -525,6 +585,8 @@ FEC 回算的方向请注意：**它把编码目标码率调低**（因为请求
 | 链路带宽够但断续出现整帧花屏 | `nvenc_vbv_increase` 过大（单帧尖峰撞队列） |
 | 静态画面也花、滚屏花 | `nvenc_enable_min_qp` 下限过高 |
 | 请求码率被"放大"看不出来但有规律 | `fec_percentage` 回算 |
+| 编码器正常建流、但码率**永远到不了目标**且数值一直在跳 | 反向 QP（`min_qp_*` > `max_qp_*`）或 `min_qp` 下限过高 —— 实测均值低至目标的 **0.10×**，同时单帧还能冲到 **9.9×** 预算 |
+| AV1 的码率上限"力度不对"（比预期更松或更严） | ⚠️ 两套标度混用：把 H.264/HEVC 的 QP 数值直接抄给 `*_av1`，或按 ×5 折算（[§4.5.1](#451-av1-的-qp-标度不可按数字换算)） |
 | 客户端设了码率上限但不生效 | ⚠️ 原生 NVENC 路径 + `max_bitrate` |
 
 ---
@@ -552,7 +614,9 @@ nvenc_split_encode = driver_decides
 nvenc_latency_over_power = enabled
 ```
 
-**为什么这是默认值本身**：这套组合让 NVENC 输出**有硬上界**（平均码率 + 一帧），是唯一能对网络做出"不会超发"承诺的配置。所有激进配方都应该从这里出发、一次改一项。
+**为什么这是默认值本身**：这套组合让 NVENC 输出**有硬上界**（平均码率 + 一帧；唯一例外是 IDR/切屏那一帧可到 ~3× 预算，见 [§7](#7-请求码率为什么失控)），是唯一能对网络做出"不超发"承诺的配置。所有激进配方都应该从这里出发、一次改一项。
+
+> ⚠️ **Linux 用户必须额外加一行** `nvenc_aq_strength = 1`（1–15 任意值），否则默认的 0 会让编码器起不来。**下面所有配方同理。**
 
 ---
 
