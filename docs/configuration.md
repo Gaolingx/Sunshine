@@ -2511,8 +2511,8 @@ supported on the current platform.
             scene change cannot be followed by a visible quality dip.
             @note{This option only applies when using NVENC [encoder](#encoder).}
             @note{Only used when a single frame VBV/HRD is in effect, see [nvenc_vbv_increase](#nvenc_vbv_increase).}
-            @note{A value of 0 keeps the value recommended by the selected [nvenc_tuning](#nvenc_tuning), which is 2
-            for low latency tuning info and 1 for ultra low latency tuning info.}
+            @note{A value of 0 keeps the driver default, which is 1 for the ultra low latency tuning information
+            Sunshine uses.}
         </td>
     </tr>
     <tr>
