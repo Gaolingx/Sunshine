@@ -44,32 +44,6 @@ INSTANTIATE_TEST_SUITE_P(
   )
 );
 
-using NvencTuningInfoParam = std::pair<std::string_view, nvenc::nvenc_tuning_info>;
-
-/**
- * @brief Parameterized coverage for the `nvenc_tuning` configuration values.
- */
-struct NvencTuningInfoTest: testing::TestWithParam<NvencTuningInfoParam> {};
-
-TEST_P(NvencTuningInfoTest, ParsesConfiguredValue) {
-  const auto &[tuning, expected] = GetParam();
-
-  EXPECT_EQ(expected, config::nv::tuning_info_from_view(tuning));
-}
-
-INSTANTIATE_TEST_SUITE_P(
-  NvencTuningInfos,
-  NvencTuningInfoTest,
-  testing::Values(
-    NvencTuningInfoParam {"hq"sv, nvenc::nvenc_tuning_info::high_quality},
-    NvencTuningInfoParam {"ll"sv, nvenc::nvenc_tuning_info::low_latency},
-    NvencTuningInfoParam {"ull"sv, nvenc::nvenc_tuning_info::ultra_low_latency},
-    NvencTuningInfoParam {"uhq"sv, nvenc::nvenc_tuning_info::ultra_high_quality},
-    NvencTuningInfoParam {"bogus"sv, nvenc::nvenc_tuning_info::ultra_low_latency},
-    NvencTuningInfoParam {""sv, nvenc::nvenc_tuning_info::ultra_low_latency}
-  )
-);
-
 namespace {
 
   /**

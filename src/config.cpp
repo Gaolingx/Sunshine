@@ -88,24 +88,6 @@ namespace config {
       return nvenc::nvenc_two_pass::quarter_resolution;
     }
 
-    nvenc::nvenc_tuning_info tuning_info_from_view(const std::string_view &tuning) {
-      using enum nvenc::nvenc_tuning_info;
-      if (tuning == "hq") {
-        return high_quality;
-      }
-      if (tuning == "ll") {
-        return low_latency;
-      }
-      if (tuning == "ull") {
-        return ultra_low_latency;
-      }
-      if (tuning == "uhq") {
-        return ultra_high_quality;
-      }
-      BOOST_LOG(warning) << "config: unknown nvenc_tuning value: " << tuning;
-      return ultra_low_latency;
-    }
-
     /**
      * @brief Parse the `nvenc_split_encode` configuration value.
      *
@@ -1633,7 +1615,6 @@ namespace config {
     string_f(vars, "sw_tune", video.sw.sw_tune);
 
     int_between_f(vars, "nvenc_preset", video.nv.quality_preset, {1, 7});
-    generic_f(vars, "nvenc_tuning", video.nv.tuning_info, nv::tuning_info_from_view);
     int_between_f(vars, "nvenc_vbv_increase", video.nv.vbv_percentage_increase, {0, 400});
     int_between_f(vars, "nvenc_ldkfs", video.nv.low_delay_key_frame_scale, {0, 10});
     bool_f(vars, "nvenc_spatial_aq", video.nv.adaptive_quantization);
@@ -1658,8 +1639,6 @@ namespace config {
 
 #if !defined(__ANDROID__) && !defined(__APPLE__)
     video.nv_legacy.preset = nv::ffmpeg_preset_from_quality(video.nv.quality_preset);
-    // FFmpeg expects the NV_ENC_TUNING_INFO value, which the configuration enum mirrors
-    video.nv_legacy.tune = std::to_underlying(video.nv.tuning_info);
     video.nv_legacy.multipass = video.nv.two_pass == nvenc::nvenc_two_pass::quarter_resolution ? NV_ENC_TWO_PASS_QUARTER_RESOLUTION :
                                 video.nv.two_pass == nvenc::nvenc_two_pass::full_resolution    ? NV_ENC_TWO_PASS_FULL_RESOLUTION :
                                                                                                  NV_ENC_MULTI_PASS_DISABLED;
