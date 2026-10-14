@@ -173,7 +173,8 @@ Windows 侧的码控全部集中在原生路径 [src/nvenc/nvenc_base.cpp:304](.
 - **是什么**：两遍编码（多遍率失真优化）。
   - `quarter_res`：用 1/4 分辨率的帧做第一遍统计 → 便宜，已经是收益的绝大部分。
   - `full_res`：全分辨率第一遍 → 更准，成本高得多。
-- **为什么需要设**：第一遍统计能让码控把比特分得更准（尤其是 GOP 内比特分配），这是"同码率下画质变好"的最廉价手段之一。
+- **为什么需要设**：去掉跨帧（时间轴）这个维度之后，它剩下的收益全是**帧内**的，源码注释与官方说明共列三条：更准的运动估计（*"better motion vectors"*）、**帧内**比特分配（官方串 *"better distribute bitrate **across the frame**"* —— 注意是 across the frame，不是 across frames）、以及更严格地守住 VBV（*"stricter VBV(HRD)"*，[nvenc_config.h:34](../../../src/nvenc/nvenc_config.h#L34)）。**第三条在这套骨架下价值最大**：Sunshine 的 VBV 恰好是一帧的预算（`vbvBufferSize = bitrate*1000/framerate`，[:294](../../../src/nvenc/nvenc_base.cpp#L294)），编码器若事先不知道这一帧有多难，就会编到一半才发现超了再猛抬 QP；抬不及就是 overshoot，而 overshoot 在实时串流里直接等于网络瞬时超预算、丢包。官方因此写 *"Disabling it is not recommended since this can lead to occasional bitrate overshoot and subsequent packet loss."*
+- **⚠️ 不要指望它做跨帧分配**：`enableLookahead` 被硬编码为 0（[:264](../../../src/nvenc/nvenc_base.cpp#L264)），且 SDK 明写 `lookaheadDepth` *"is only used if enableLookahead=1"*；再叠加 `gopLength = NVENC_INFINITE_GOPLENGTH`（无自动 IDR ⇒ 没有 GOP 边界可作为预算锚点），**"静态省、动态多"这种沿时间轴的分配在这条链路上做不到**。要它请改用 `nvenc_vbv_increase`（[§4.4](#44-vbv_increase码率窗口)）、`nvenc_temporal_aq`（[§4.2](#42-spatial_aq--aq_strength--temporal_aq自适应量化)）或 `nvenc_nonref_p`（[§4.3](#43-nonref_p--weighted_prediction--ldkfs帧类型与参考行为)）。
 - **副作用（关键）**：**两遍编码占用 CUDA 核心**（源码注释原文口径），也就是说它会**和游戏抢 SM**。在 GPU 已经满载的游戏场景里，这会把"编码变快"变成"游戏掉帧 + 帧时间抖动"。
 - **建议**：默认 `quarter_res` 是很好的折中；`full_res` 只在 GPU 有余量且你追求画质时用；**笔记本/Optimus 或 GPU 满载时应该改成 `disabled`**。
 
