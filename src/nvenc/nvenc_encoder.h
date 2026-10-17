@@ -6,6 +6,7 @@
 
 // standard includes
 #include <cstdint>
+#include <vector>
 
 // local includes
 #include "nvenc_config.h"
@@ -56,11 +57,24 @@ namespace nvenc {
     /**
      * @brief Encode the next frame using the platform-specific input surface.
      *
+     * When rate control lookahead is enabled the encoder buffers input frames internally, so a
+     * submission does not necessarily produce an output immediately, and a single call can make
+     * several previously submitted frames available at once.
+     *
      * @param frame_index Frame index that uniquely identifies the frame.
      * @param force_idr Whether to encode the frame as a forced IDR.
-     * @return Encoded frame.
+     * @param out_frames List that receives every frame that became available during this call.
+     * @return `true` on success, `false` on error.
      */
-    virtual nvenc_encoded_frame encode_frame(std::uint64_t frame_index, bool force_idr) = 0;
+    virtual bool encode_frame(std::uint64_t frame_index, bool force_idr, std::vector<nvenc_encoded_frame> &out_frames) = 0;
+
+    /**
+     * @brief Signal the end of the input stream and collect every frame still buffered internally.
+     *
+     * @param out_frames List that receives every frame that became available during this call.
+     * @return `true` on success, `false` on error.
+     */
+    virtual bool flush(std::vector<nvenc_encoded_frame> &out_frames) = 0;
 
     /**
      * @brief Invalidate reference frames in the requested range.

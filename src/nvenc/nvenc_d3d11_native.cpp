@@ -23,9 +23,32 @@ namespace NVENC_NAMESPACE {
     }
   }
 
-  ID3D11Texture2D *
-    nvenc_d3d11_native::get_input_texture() {
-    return d3d_input_texture.GetInterfacePtr();
+  std::size_t nvenc_d3d11_native::get_input_texture_count() const {
+    return d3d_input_textures.size();
+  }
+
+  ID3D11Texture2D *nvenc_d3d11_native::get_input_texture(std::size_t index) {
+    if (index >= d3d_input_textures.size()) {
+      return nullptr;
+    }
+
+    return d3d_input_textures[index].GetInterfacePtr();
+  }
+
+  bool nvenc_d3d11_native::copy_input_surface(std::size_t from, std::size_t to) {
+    if (from >= d3d_input_textures.size() || to >= d3d_input_textures.size()) {
+      return false;
+    }
+
+    ID3D11DeviceContextPtr d3d_context;
+    d3d_device->GetImmediateContext(&d3d_context);
+    if (!d3d_context) {
+      BOOST_LOG(error) << "NvEnc: couldn't get immediate context to duplicate the frame";
+      return false;
+    }
+
+    d3d_context->CopyResource(d3d_input_textures[to].GetInterfacePtr(), d3d_input_textures[from].GetInterfacePtr());
+    return true;
   }
 
   bool nvenc_d3d11_native::create_and_register_input_buffer() {
@@ -34,7 +57,9 @@ namespace NVENC_NAMESPACE {
       return false;
     }
 
-    if (!d3d_input_texture) {
+    if (d3d_input_textures.empty()) {
+      d3d_input_textures.resize(input_surface_count);
+
       D3D11_TEXTURE2D_DESC desc = {};
       desc.Width = encoder_params.width;
       desc.Height = encoder_params.height;
@@ -44,27 +69,32 @@ namespace NVENC_NAMESPACE {
       desc.SampleDesc.Count = 1;
       desc.Usage = D3D11_USAGE_DEFAULT;
       desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-      if (d3d_device->CreateTexture2D(&desc, nullptr, &d3d_input_texture) != S_OK) {
-        BOOST_LOG(error) << "NvEnc: couldn't create input texture";
-        return false;
+
+      for (auto &texture : d3d_input_textures) {
+        if (d3d_device->CreateTexture2D(&desc, nullptr, &texture) != S_OK) {
+          BOOST_LOG(error) << "NvEnc: couldn't create input texture";
+          return false;
+        }
       }
     }
 
-    if (!registered_input_buffer) {
-      NV_ENC_REGISTER_RESOURCE register_resource = {.version = NV_ENC_REGISTER_RESOURCE_VER};
-      register_resource.resourceType = NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX;
-      register_resource.width = encoder_params.width;
-      register_resource.height = encoder_params.height;
-      register_resource.resourceToRegister = d3d_input_texture.GetInterfacePtr();
-      register_resource.bufferFormat = encoder_params.buffer_format;
-      register_resource.bufferUsage = NV_ENC_INPUT_IMAGE;
+    if (registered_input_buffers.empty()) {
+      for (auto &texture : d3d_input_textures) {
+        NV_ENC_REGISTER_RESOURCE register_resource = {.version = NV_ENC_REGISTER_RESOURCE_VER};
+        register_resource.resourceType = NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX;
+        register_resource.width = encoder_params.width;
+        register_resource.height = encoder_params.height;
+        register_resource.resourceToRegister = texture.GetInterfacePtr();
+        register_resource.bufferFormat = encoder_params.buffer_format;
+        register_resource.bufferUsage = NV_ENC_INPUT_IMAGE;
 
-      if (nvenc_failed(nvenc->nvEncRegisterResource(encoder, &register_resource))) {
-        BOOST_LOG(error) << "NvEnc: NvEncRegisterResource() failed: " << last_nvenc_error_string;
-        return false;
+        if (nvenc_failed(nvenc->nvEncRegisterResource(encoder, &register_resource))) {
+          BOOST_LOG(error) << "NvEnc: NvEncRegisterResource() failed: " << last_nvenc_error_string;
+          return false;
+        }
+
+        registered_input_buffers.push_back(register_resource.registeredResource);
       }
-
-      registered_input_buffer = register_resource.registeredResource;
     }
 
     return true;

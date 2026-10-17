@@ -15,7 +15,6 @@ namespace NVENC_NAMESPACE {
       dll(std::move(dll)) {
     async_event_handle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
   }
-
   nvenc_d3d11::~nvenc_d3d11() {
     if (async_event_handle) {
       CloseHandle(async_event_handle);
@@ -48,6 +47,14 @@ namespace NVENC_NAMESPACE {
 
   bool nvenc_d3d11::wait_for_async_event(uint32_t timeout_ms) {
     return WaitForSingleObject(async_event_handle, timeout_ms) == WAIT_OBJECT_0;
+  }
+
+  ID3D11Texture2D *nvenc_d3d11::acquire_input_texture() {
+    if (!acquire_input_surface()) {
+      return nullptr;
+    }
+
+    return get_input_texture(current_input_surface);
   }
 
 }  // namespace NVENC_NAMESPACE

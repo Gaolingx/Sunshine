@@ -208,6 +208,68 @@ TEST_F(NvencQualityOptionsTest, KeepsDriverDefaultKeyFrameScaleWhenOutOfRange) {
   EXPECT_EQ(0, config::video.nv.low_delay_key_frame_scale);
 }
 
+TEST_F(NvencQualityOptionsTest, AppliesVbvSizeInMilliseconds) {
+  config::apply_config_for_test("nvenc_vbv_ms = 500\n");
+
+  EXPECT_EQ(500, config::video.nv.vbv_milliseconds);
+#if !defined(__ANDROID__) && !defined(__APPLE__)
+  EXPECT_EQ(500, config::video.nv_legacy.vbv_ms);
+#endif
+}
+
+TEST_F(NvencQualityOptionsTest, KeepsSingleFrameVbvWhenMillisecondsAreOutOfRange) {
+  config::apply_config_for_test("nvenc_vbv_ms = 1001\n");
+
+  EXPECT_EQ(0, config::video.nv.vbv_milliseconds);
+#if !defined(__ANDROID__) && !defined(__APPLE__)
+  EXPECT_EQ(0, config::video.nv_legacy.vbv_ms);
+#endif
+}
+
+TEST_F(NvencQualityOptionsTest, AppliesLookaheadDepth) {
+  config::apply_config_for_test("nvenc_lookahead_depth = 5\n");
+
+  EXPECT_EQ(5, config::video.nv.lookahead_depth);
+}
+
+TEST_F(NvencQualityOptionsTest, KeepsLookaheadDisabledWhenDepthIsOutOfRange) {
+  config::apply_config_for_test("nvenc_lookahead_depth = 17\n");
+
+  EXPECT_EQ(0, config::video.nv.lookahead_depth);
+}
+
+#if !defined(__APPLE__)
+/**
+ * @brief Regression coverage for the NVENC rate control lookahead pipeline.
+ *
+ * Lookahead makes the driver buffer several pictures, so the encoder has to rotate input surfaces,
+ * retrieve only finished bitstreams and drain the tail before teardown. A mistake in any of those
+ * steps makes the encoder fail validation and disappear from the available encoders.
+ */
+struct NvencLookaheadTest: PlatformTestSuite {
+  void SetUp() override {
+    BaseTest::SetUp();
+    original_nv = config::video.nv;
+    config::video.nv = nvenc::nvenc_config {};
+    config::video.nv.lookahead_depth = 4;
+    config::video.nv.vbv_milliseconds = 300;
+  }
+
+  void TearDown() override {
+    config::video.nv = original_nv;
+    BaseTest::TearDown();
+  }
+
+  nvenc::nvenc_config original_nv {};  ///< NVENC configuration restored after each test.
+};
+
+TEST_F(NvencLookaheadTest, ValidatesAndEncodesWithLookaheadAndVbv) {
+  if (!video::validate_encoder(video::nvenc, false)) {
+    GTEST_SKIP() << "NVENC encoder not available";
+  }
+}
+#endif
+
 TEST_F(NvencQualityOptionsTest, AppliesMinimumQpLimitsPerCodec) {
   config::apply_config_for_test(
     "nvenc_enable_min_qp = enabled\n"

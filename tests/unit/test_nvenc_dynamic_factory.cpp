@@ -11,6 +11,7 @@
   #include <memory>
   #include <string_view>
   #include <utility>
+  #include <vector>
 
   // lib includes
   #include <gtest/gtest.h>
@@ -51,15 +52,28 @@ namespace {
     void destroy_encoder() override {
     }
 
-    nvenc::nvenc_encoded_frame encode_frame(std::uint64_t frame_index, bool force_idr) override {
-      return {{}, frame_index, force_idr, false};
+    bool encode_frame(std::uint64_t frame_index, bool force_idr, std::vector<nvenc::nvenc_encoded_frame> &out_frames) override {
+      out_frames.push_back({{}, frame_index, force_idr, false});
+      return true;
+    }
+
+    bool flush(std::vector<nvenc::nvenc_encoded_frame> &) override {
+      return true;
     }
 
     bool invalidate_ref_frames(std::uint64_t, std::uint64_t) override {
       return true;
     }
 
-    ID3D11Texture2D *get_input_texture() override {
+    std::size_t get_input_texture_count() const override {
+      return 1;
+    }
+
+    ID3D11Texture2D *get_input_texture(std::size_t) override {
+      return nullptr;
+    }
+
+    ID3D11Texture2D *acquire_input_texture() override {
       return nullptr;
     }
   };

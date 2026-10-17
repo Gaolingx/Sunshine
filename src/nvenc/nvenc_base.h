@@ -4,6 +4,12 @@
  */
 #pragma once
 
+// standard includes
+#include <cstdint>
+#include <deque>
+#include <utility>
+#include <vector>
+
 // local includes
 #include "nvenc_colorspace.h"
 #include "nvenc_config.h"
@@ -62,9 +68,18 @@ namespace NVENC_NAMESPACE {
      *        Afterwards serves as parameter for `invalidate_ref_frames()`.
      *        No restrictions on the first frame index, but later frame indexes must be subsequent.
      * @param force_idr Whether to encode frame as forced IDR.
-     * @return Encoded frame.
+     * @param out_frames List that receives every frame that became available during this call.
+     *        May stay empty while the rate control lookahead window is being filled.
+     * @return `true` on success, `false` on error.
      */
-    ::nvenc::nvenc_encoded_frame encode_frame(uint64_t frame_index, bool force_idr) override;
+    bool encode_frame(uint64_t frame_index, bool force_idr, std::vector<::nvenc::nvenc_encoded_frame> &out_frames) override;
+
+    /**
+     * @brief Signal the end of the input stream and collect the frames still buffered internally.
+     * @param out_frames List that receives every frame that became available during this call.
+     * @return `true` on success, `false` on error.
+     */
+    bool flush(std::vector<::nvenc::nvenc_encoded_frame> &out_frames) override;
 
     /**
      * @brief Perform reference frame invalidation (RFI) procedure.
@@ -84,12 +99,24 @@ namespace NVENC_NAMESPACE {
     virtual bool init_library() = 0;
 
     /**
-     * @brief Required. Used for creating outside-facing input surface,
-     *        registering this surface with `nvenc->nvEncRegisterResource()` and setting `registered_input_buffer` variable.
-     *        Called during `create_encoder()`.
+     * @brief Required. Used for creating outside-facing input surfaces,
+     *        registering each surface with `nvenc->nvEncRegisterResource()` and appending the registration
+     *        handles to `registered_input_buffers`.
+     *        Called during `create_encoder()`, must create `input_surface_count` surfaces.
      * @return `true` on success, `false` on error
      */
     virtual bool create_and_register_input_buffer() = 0;
+
+    /**
+     * @brief Pick the input surface that the next captured frame is converted into and submitted from.
+     *
+     * Derived classes call this before writing into their platform-specific surface storage.
+     * Surfaces are used as a ring buffer because the driver keeps lookahead frames alive until
+     * their bitstream has been retrieved.
+     *
+     * @return `true` when a free surface was selected, `false` on error.
+     */
+    bool acquire_input_surface();
 
     /**
      * @brief Optional. Override if you must perform additional operations on the registered input surface in the beginning of `encode_frame()`.
@@ -98,6 +125,21 @@ namespace NVENC_NAMESPACE {
      */
     virtual bool synchronize_input_buffer() {
       return true;
+    }
+
+    /**
+     * @brief Optional. Override when one input surface can be duplicated into another.
+     *
+     * The video pipeline repeats the last frame when capture delivers slower than the encoder runs,
+     * but the driver keeps reading the surface of the previous frame while the lookahead window
+     * is filled, so the content has to be copied into a fresh surface.
+     *
+     * @param from Index of the surface that holds the frame to duplicate.
+     * @param to Index of the surface that receives the copy.
+     * @return `true` on success, `false` on error or when duplication is unsupported.
+     */
+    virtual bool copy_input_surface(std::size_t from, std::size_t to) {
+      return false;
     }
 
     /**
@@ -137,12 +179,43 @@ namespace NVENC_NAMESPACE {
                              ///< Should be set in constructor or `init_library()`.
     std::shared_ptr<NV_ENCODE_API_FUNCTION_LIST> nvenc;  ///< Function pointers list produced by `NvEncodeAPICreateInstance()`.
                                                          ///< Should be set in `init_library()`.
-    NV_ENC_REGISTERED_PTR registered_input_buffer = nullptr;  ///< Platform-specific input surface registered with `NvEncRegisterResource()`.
-                                                              ///< Should be set in `create_and_register_input_buffer()`.
+    std::vector<NV_ENC_REGISTERED_PTR> registered_input_buffers;  ///< Platform-specific input surfaces registered with `NvEncRegisterResource()`.
+                                                                 ///< Should be filled in `create_and_register_input_buffer()`.
+    std::size_t input_surface_count = 1;  ///< Number of input surfaces the encoder rotates through.
+    std::size_t current_input_surface = 0;  ///< Index of the input surface that is currently being filled and submitted.
+    bool input_surface_filled = false;  ///< Whether the current input surface received a converted frame since the last submission.
     void *async_event_handle = nullptr;  ///< (optional) Platform-specific handle of event object event.
                                          ///< Can be set in constructor or `init_library()`, must override `wait_for_async_event()`.
 
   private:
+    /**
+     * @brief One submitted picture that the driver may not have finished encoding yet.
+     */
+    struct submitted_frame {
+      std::uint64_t frame_index = 0;  ///< Frame index of the submitted picture.
+      bool idr = false;  ///< Whether the picture was submitted as a forced IDR frame.
+      NV_ENC_INPUT_PTR mapped_input_buffer = nullptr;  ///< Mapped input resource, unmapped when the bitstream is retrieved.
+    };
+
+    /**
+     * @brief Retrieve the bitstreams of pictures the driver finished encoding.
+     *
+     * @param ready_count Number of finished pictures, the oldest submissions are retrieved first.
+     * @param out_frames List that receives the retrieved frames, in submission order.
+     * @param wait_for_completion_event Whether to wait for the async completion event first.
+     * @return `true` on success, `false` on error.
+     */
+    bool reap_output_frames(std::size_t ready_count, std::vector<::nvenc::nvenc_encoded_frame> &out_frames, bool wait_for_completion_event = true);
+
+    /**
+     * @brief Retrieve and unlock a single pending bitstream.
+     *
+     * @param bitstream Bitstream buffer to retrieve.
+     * @param frame Receives the encoded payload and frame metadata.
+     * @return `true` on success, `false` on error.
+     */
+    bool retrieve_bitstream(NV_ENC_OUTPUT_PTR bitstream, ::nvenc::nvenc_encoded_frame &frame);
+
     /**
      * @brief Query one encoder capability.
      *
@@ -186,6 +259,19 @@ namespace NVENC_NAMESPACE {
       NV_ENC_CONFIG &enc_config,
       const ::nvenc::nvenc_config &config,
       const video::config_t &client_config,
+      const GUID &encode_guid
+    );
+
+    /**
+     * @brief Configure the rate control lookahead window.
+     *
+     * @param enc_config Encoder configuration to update.
+     * @param config NVENC encoder configuration.
+     * @param encode_guid Selected codec GUID.
+     */
+    void configure_lookahead(
+      NV_ENC_CONFIG &enc_config,
+      const ::nvenc::nvenc_config &config,
       const GUID &encode_guid
     );
 
@@ -328,13 +414,20 @@ namespace NVENC_NAMESPACE {
       NV_ENC_BUFFER_FORMAT buffer_format
     ) const;
 
-    NV_ENC_OUTPUT_PTR output_bitstream = nullptr;
+    std::vector<NV_ENC_OUTPUT_PTR> output_bitstreams;  ///< Bitstream buffers used for the pictures that are currently in flight.
+
+    std::size_t next_input_surface = 0;  ///< Index of the input surface that will be submitted next.
+    std::deque<std::size_t> in_flight_input_surfaces;  ///< Input surfaces that the driver may still read from.
+    std::deque<NV_ENC_OUTPUT_PTR> free_output_bitstreams;  ///< Bitstream buffers that can be reused right away.
+    std::deque<NV_ENC_OUTPUT_PTR> pending_output_bitstreams;  ///< Bitstream buffers of pictures that are not ready yet.
+    std::deque<submitted_frame> submitted_frames;  ///< Metadata of the submitted pictures, in submission order.
 
     struct {
-      uint64_t last_encoded_frame_index = 0;
-      bool rfi_needs_confirmation = false;
-      std::pair<uint64_t, uint64_t> last_rfi_range;
-      logging::min_max_avg_periodic_logger<double> frame_size_logger = {debug, "NvEnc: encoded frame sizes in kB", ""};
+      uint64_t last_encoded_frame_index = 0;  ///< Index of the most recently completed frame, used for RFI.
+      std::uint64_t completed_frame_count = 0;  ///< Number of frames whose bitstream has been retrieved.
+      bool rfi_needs_confirmation = false;  ///< Whether the next retrieved frame must be flagged as post-RFI.
+      std::pair<uint64_t, uint64_t> last_rfi_range;  ///< Last fulfilled RFI range.
+      logging::min_max_avg_periodic_logger<double> frame_size_logger = {debug, "NvEnc: encoded frame sizes in kB", ""};  ///< Frame size statistics.
     } encoder_state;
   };
 

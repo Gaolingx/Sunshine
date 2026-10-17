@@ -4,7 +4,25 @@
  */
 #pragma once
 
+// standard includes
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+
 namespace nvenc {
+
+  /**
+   * @brief Maximum lookahead depth accepted by the NVENC SDK with no B-frames.
+   */
+  constexpr int max_lookahead_depth = 16;
+
+  /**
+   * @brief Maximum target buffer size used when deriving a millisecond based VBV/HRD.
+   *
+   * The video protocol can only carry a limited amount of data for a single encoded frame,
+   * so an oversized VBV window would allow frame sizes the client cannot receive.
+   */
+  constexpr std::uint64_t max_vbv_buffer_size_bits = 8ULL * 1024 * 1024;
 
   /**
    * @brief Enumerates supported nVENC two pass options.
@@ -33,9 +51,6 @@ namespace nvenc {
 
     // Use optional preliminary pass for better motion vectors, bitrate distribution and stricter VBV(HRD), uses CUDA cores
     nvenc_two_pass two_pass = nvenc_two_pass::quarter_resolution;  ///< Two pass.
-
-    // Percentage increase of VBV/HRD from the default single frame, allows low-latency variable bitrate
-    int vbv_percentage_increase = 0;  ///< Vbv percentage increase.
 
     // Ratio of I-frame bits to P-frame bits in single frame VBV CBR mode, zero uses the driver default of the tuning info
     int low_delay_key_frame_scale = 0;  ///< Low delay key frame scale.
@@ -87,6 +102,61 @@ namespace nvenc {
 
     // Enable split-frame encoding if the gpu has multiple NVENC hardware clusters
     nvenc_split_frame_encoding split_frame_encoding = nvenc_split_frame_encoding::driver_decides;  ///< Split frame encoding.
+
+    // Size of the VBV/HRD buffer in milliseconds of target bitrate, zero keeps the default single frame buffer
+    int vbv_milliseconds = 0;  ///< Vbv buffer size in milliseconds.
+
+    // Number of frames the rate control may look ahead, zero disables lookahead buffering
+    int lookahead_depth = 0;  ///< Rate control lookahead depth in frames.
   };
+
+  /**
+   * @brief Compute the VBV/HRD buffer size in bits requested by the configuration.
+   *
+   * @param config NVENC encoder configuration.
+   * @param framerate Encoded frames per second.
+   * @param bitrate_kbps Target bitrate in kilobits per second.
+   * @return Buffer size in bits, never smaller than a single frame of target bitrate.
+   */
+  inline std::uint64_t vbv_buffer_size_bits(const nvenc_config &config, int framerate, int bitrate_kbps) {
+    if (framerate <= 0 || bitrate_kbps <= 0) {
+      return 0;
+    }
+
+    const auto bitrate = static_cast<std::uint64_t>(bitrate_kbps);
+    const auto total_bitrate = bitrate * 1000;
+    const auto single_frame_size = total_bitrate / static_cast<std::uint64_t>(framerate);
+
+    std::uint64_t buffer_size = single_frame_size;
+    if (config.vbv_milliseconds > 0) {
+      const auto requested = bitrate * static_cast<std::uint64_t>(config.vbv_milliseconds);
+      if (requested > buffer_size) {
+        buffer_size = requested;
+      }
+    }
+
+    // The cap has to be applied after the requested window is computed, otherwise a large
+    // millisecond value could produce a buffer the video protocol is unable to deliver.
+    buffer_size = std::min(buffer_size, max_vbv_buffer_size_bits);
+
+    // A buffer smaller than one frame would starve the rate controller, so the frame size wins.
+    return std::max(buffer_size, single_frame_size);
+  }
+
+  /**
+   * @brief Compute how many NVENC input surfaces the configuration requires to run.
+   *
+   * @param config NVENC encoder configuration.
+   * @return Number of input surfaces that must stay allocated and registered.
+   */
+  inline std::size_t input_surface_count(const nvenc_config &config) {
+    if (config.lookahead_depth <= 0) {
+      return 1;
+    }
+
+    // The driver holds every frame of the lookahead window plus the one currently being encoded,
+    // and both the surface being converted and the one being submitted must stay reserved.
+    return static_cast<std::size_t>(config.lookahead_depth) + 6;
+  }
 
 }  // namespace nvenc

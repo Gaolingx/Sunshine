@@ -22,6 +22,10 @@ namespace NVENC_NAMESPACE {
    */
   using ID3D11DevicePtr = ID3D11Device *;
   /**
+   * @brief COM smart pointer for ID3D11DeviceContext.
+   */
+  using ID3D11DeviceContextPtr = ID3D11DeviceContext *;
+  /**
    * @brief COM smart pointer for ID3D11Texture2D.
    */
   using ID3D11Texture2DPtr = ID3D11Texture2D *;
@@ -35,6 +39,7 @@ namespace NVENC_NAMESPACE {
   using IDXGIAdapterPtr = IDXGIAdapter *;
   #else
   _COM_SMARTPTR_TYPEDEF(ID3D11Device, IID_ID3D11Device);
+  _COM_SMARTPTR_TYPEDEF(ID3D11DeviceContext, IID_ID3D11DeviceContext);
   _COM_SMARTPTR_TYPEDEF(ID3D11Texture2D, IID_ID3D11Texture2D);
   _COM_SMARTPTR_TYPEDEF(IDXGIDevice, IID_IDXGIDevice);
   _COM_SMARTPTR_TYPEDEF(IDXGIAdapter, IID_IDXGIAdapter);
@@ -56,10 +61,23 @@ namespace NVENC_NAMESPACE {
     ~nvenc_d3d11() override;
 
     /**
-     * @brief Get input surface texture.
+     * @brief Number of input textures the encoder rotates through.
+     * @return Number of textures returned by `get_input_texture()`.
+     */
+    std::size_t get_input_texture_count() const override = 0;
+
+    /**
+     * @brief Get the texture of one input surface.
+     * @param index Input surface index, smaller than `get_input_texture_count()`.
      * @return Input surface texture.
      */
-    ID3D11Texture2D *get_input_texture() override = 0;
+    ID3D11Texture2D *get_input_texture(std::size_t index) override = 0;
+
+    /**
+     * @brief Reserve the next input surface and return its texture.
+     * @return Texture to convert the next frame into, or `nullptr` when no surface is available.
+     */
+    ID3D11Texture2D *acquire_input_texture() override;
 
   protected:
     bool init_library() override;

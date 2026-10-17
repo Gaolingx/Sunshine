@@ -4,6 +4,9 @@
  */
 #pragma once
 #ifdef _WIN32
+  // standard includes
+  #include <vector>
+
   // local includes
   #include "nvenc_d3d11.h"
   #include "nvenc_sdk.h"
@@ -24,7 +27,11 @@ namespace NVENC_NAMESPACE {
     explicit nvenc_d3d11_on_cuda(ID3D11Device *d3d_device, ::nvenc::shared_dll dll);
     ~nvenc_d3d11_on_cuda() override;
 
-    ID3D11Texture2D *get_input_texture() override;
+    std::size_t get_input_texture_count() const override;
+    ID3D11Texture2D *get_input_texture(std::size_t index) override;
+
+  protected:
+    bool copy_input_surface(std::size_t from, std::size_t to) override;
 
   private:
     bool init_library() override;
@@ -79,8 +86,8 @@ namespace NVENC_NAMESPACE {
     CUresult last_cuda_error = CUDA_SUCCESS;
     CUcontext cuda_context = nullptr;
     CUgraphicsResource cuda_d3d_input_texture = nullptr;
-    CUdeviceptr cuda_surface = 0;
-    size_t cuda_surface_pitch = 0;
+    std::vector<CUdeviceptr> cuda_surfaces;
+    std::vector<size_t> cuda_surface_pitches;
   };
 
 }  // namespace NVENC_NAMESPACE

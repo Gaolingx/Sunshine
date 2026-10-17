@@ -32,12 +32,15 @@ namespace NVENC_NAMESPACE {
           cuda_d3d_input_texture = nullptr;
         }
 
-        if (cuda_surface) {
-          if (cuda_failed(cuda_functions.cuMemFree(cuda_surface))) {
-            BOOST_LOG(error) << "NvEnc: cuMemFree() failed: error " << last_cuda_error;
+        for (auto cuda_surface : cuda_surfaces) {
+          if (cuda_surface) {
+            if (cuda_failed(cuda_functions.cuMemFree(cuda_surface))) {
+              BOOST_LOG(error) << "NvEnc: cuMemFree() failed: error " << last_cuda_error;
+            }
           }
-          cuda_surface = 0;
         }
+        cuda_surfaces.clear();
+        cuda_surface_pitches.clear();
       }
 
       if (cuda_failed(cuda_functions.cuCtxDestroy(cuda_context))) {
@@ -52,8 +55,18 @@ namespace NVENC_NAMESPACE {
     }
   }
 
-  ID3D11Texture2D *nvenc_d3d11_on_cuda::get_input_texture() {
+  ID3D11Texture2D *nvenc_d3d11_on_cuda::get_input_texture(std::size_t) {
     return d3d_input_texture.GetInterfacePtr();
+  }
+
+  std::size_t nvenc_d3d11_on_cuda::get_input_texture_count() const {
+    // The frame is rendered once into a single Direct3D texture and copied to the CUDA surface in use
+    return 1;
+  }
+
+  bool nvenc_d3d11_on_cuda::copy_input_surface(std::size_t, std::size_t) {
+    // The Direct3D texture is left untouched between frames, so synchronizing the new surface reuses it
+    return true;
   }
 
   bool nvenc_d3d11_on_cuda::init_library() {
@@ -131,34 +144,41 @@ namespace NVENC_NAMESPACE {
         }
       }
 
-      if (!cuda_surface) {
-        if (cuda_failed(cuda_functions.cuMemAllocPitch(&cuda_surface, &cuda_surface_pitch,
-                                                       // Planar 16-bit YUV
-                                                       encoder_params.width * 2,
-                                                       encoder_params.height * 3,
-                                                       16))) {
-          BOOST_LOG(error) << "NvEnc: cuMemAllocPitch() failed: error " << last_cuda_error;
-          return false;
+      if (cuda_surfaces.empty()) {
+        cuda_surfaces.resize(input_surface_count);
+        cuda_surface_pitches.resize(input_surface_count);
+
+        for (std::size_t i = 0; i < input_surface_count; i++) {
+          if (cuda_failed(cuda_functions.cuMemAllocPitch(&cuda_surfaces[i], &cuda_surface_pitches[i],
+                                                         // Planar 16-bit YUV
+                                                         encoder_params.width * 2,
+                                                         encoder_params.height * 3,
+                                                         16))) {
+            BOOST_LOG(error) << "NvEnc: cuMemAllocPitch() failed: error " << last_cuda_error;
+            return false;
+          }
         }
       }
     }
 
-    if (!registered_input_buffer) {
-      NV_ENC_REGISTER_RESOURCE register_resource = {.version = NV_ENC_REGISTER_RESOURCE_VER};
-      register_resource.resourceType = NV_ENC_INPUT_RESOURCE_TYPE_CUDADEVICEPTR;
-      register_resource.width = encoder_params.width;
-      register_resource.height = encoder_params.height;
-      register_resource.pitch = cuda_surface_pitch;
-      register_resource.resourceToRegister = (void *) cuda_surface;
-      register_resource.bufferFormat = encoder_params.buffer_format;
-      register_resource.bufferUsage = NV_ENC_INPUT_IMAGE;
+    if (registered_input_buffers.empty()) {
+      for (std::size_t i = 0; i < cuda_surfaces.size(); i++) {
+        NV_ENC_REGISTER_RESOURCE register_resource = {.version = NV_ENC_REGISTER_RESOURCE_VER};
+        register_resource.resourceType = NV_ENC_INPUT_RESOURCE_TYPE_CUDADEVICEPTR;
+        register_resource.width = encoder_params.width;
+        register_resource.height = encoder_params.height;
+        register_resource.pitch = cuda_surface_pitches[i];
+        register_resource.resourceToRegister = (void *) cuda_surfaces[i];
+        register_resource.bufferFormat = encoder_params.buffer_format;
+        register_resource.bufferUsage = NV_ENC_INPUT_IMAGE;
 
-      if (nvenc_failed(nvenc->nvEncRegisterResource(encoder, &register_resource))) {
-        BOOST_LOG(error) << "NvEnc: NvEncRegisterResource() failed: " << last_nvenc_error_string;
-        return false;
+        if (nvenc_failed(nvenc->nvEncRegisterResource(encoder, &register_resource))) {
+          BOOST_LOG(error) << "NvEnc: NvEncRegisterResource() failed: " << last_nvenc_error_string;
+          return false;
+        }
+
+        registered_input_buffers.push_back(register_resource.registeredResource);
       }
-
-      registered_input_buffer = register_resource.registeredResource;
     }
 
     return true;
@@ -195,8 +215,8 @@ namespace NVENC_NAMESPACE {
       copy_params.srcMemoryType = CU_MEMORYTYPE_ARRAY;
       copy_params.srcArray = input_texture_array;
       copy_params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
-      copy_params.dstDevice = cuda_surface;
-      copy_params.dstPitch = cuda_surface_pitch;
+      copy_params.dstDevice = cuda_surfaces[current_input_surface];
+      copy_params.dstPitch = cuda_surface_pitches[current_input_surface];
       // Planar 16-bit YUV
       copy_params.WidthInBytes = encoder_params.width * 2;
       copy_params.Height = encoder_params.height * 3;

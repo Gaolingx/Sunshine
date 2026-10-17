@@ -73,16 +73,24 @@ const config = ref(props.config)
       <div class="form-text">{{ $t('config.nvenc_aq_strength_desc') }}</div>
     </div>
 
-    <!-- Single-frame VBV/HRD percentage increase -->
+    <!-- VBV/HRD buffer size in milliseconds -->
     <div class="mb-3">
-      <label for="nvenc_vbv_increase" class="form-label">{{ $t('config.nvenc_vbv_increase') }}</label>
-      <input type="number" min="0" max="400" class="form-control" id="nvenc_vbv_increase" placeholder="0"
-             v-model="config.nvenc_vbv_increase" />
+      <label for="nvenc_vbv_ms" class="form-label">{{ $t('config.nvenc_vbv_ms') }}</label>
+      <input type="number" min="0" max="1000" class="form-control" id="nvenc_vbv_ms" placeholder="0"
+             v-model="config.nvenc_vbv_ms" />
       <div class="form-text">
-        {{ $t('config.nvenc_vbv_increase_desc') }}<br>
+        {{ $t('config.nvenc_vbv_ms_desc') }}<br>
         <br>
         <a href="https://en.wikipedia.org/wiki/Video_buffering_verifier">VBV/HRD</a>
       </div>
+    </div>
+
+    <!-- Rate control lookahead depth -->
+    <div class="mb-3">
+      <label for="nvenc_lookahead_depth" class="form-label">{{ $t('config.nvenc_lookahead_depth') }}</label>
+      <input type="number" min="0" max="16" class="form-control" id="nvenc_lookahead_depth" placeholder="0"
+             v-model="config.nvenc_lookahead_depth" />
+      <div class="form-text">{{ $t('config.nvenc_lookahead_depth_desc') }}</div>
     </div>
 
     <!-- Advanced compression options -->

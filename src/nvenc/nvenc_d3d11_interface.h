@@ -5,6 +5,9 @@
 #pragma once
 #ifdef _WIN32
 
+  // standard includes
+  #include <cstddef>
+
   // lib includes
   #include <d3d11.h>
 
@@ -25,11 +28,28 @@ namespace nvenc {
     ~nvenc_d3d11_interface() override = default;
 
     /**
-     * @brief Get the input surface texture.
+     * @brief Number of input textures the encoder rotates through.
      *
+     * @return Number of textures returned by `get_input_texture()`.
+     */
+    virtual std::size_t get_input_texture_count() const = 0;
+
+    /**
+     * @brief Get the texture of one input surface.
+     *
+     * @param index Input surface index, smaller than `get_input_texture_count()`.
      * @return Input surface texture.
      */
-    virtual ID3D11Texture2D *get_input_texture() = 0;
+    virtual ID3D11Texture2D *get_input_texture(std::size_t index) = 0;
+
+    /**
+     * @brief Reserve the next input surface and return the texture that must be converted into it.
+     *
+     * The returned texture stays owned by the encoder until the frame it receives has been encoded.
+     *
+     * @return Texture to convert the next frame into, or `nullptr` when no surface is available.
+     */
+    virtual ID3D11Texture2D *acquire_input_texture() = 0;
   };
 
 }  // namespace nvenc

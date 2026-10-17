@@ -7,9 +7,11 @@
 #include <array>
 #include <atomic>
 #include <bitset>
+#include <deque>
 #include <list>
 #include <thread>
 #include <utility>
+#include <vector>
 
 // lib includes
 #include <boost/pointer_cast.hpp>
@@ -598,24 +600,61 @@ namespace video {
     }
 
     /**
-     * @brief Submit the next frame to NVENC and return the encoded payload.
+     * @brief Submit the next frame to NVENC and collect the frames that became available.
      *
      * @param frame_index Monotonic frame index assigned by the video pipeline.
-     * @return Encoded NVENC frame payload and frame metadata.
+     * @param frame_timestamp Capture timestamp associated with the submitted frame.
+     * @param out_frames Appended with every frame that NVENC finished during this submission.
+     * @return `true` on success, `false` on encoding failure.
      */
-    nvenc::nvenc_encoded_frame encode_frame(uint64_t frame_index) {
+    bool encode_frame(uint64_t frame_index, std::optional<std::chrono::steady_clock::time_point> frame_timestamp, std::vector<nvenc::nvenc_encoded_frame> &out_frames) {
       if (!device || !device->nvenc) {
-        return {};
+        return false;
       }
 
-      auto result = device->nvenc->encode_frame(frame_index, force_idr);
+      pending_timestamps.push_back(frame_timestamp);
+
+      if (!device->nvenc->encode_frame(frame_index, force_idr, out_frames)) {
+        return false;
+      }
+
       force_idr = false;
-      return result;
+      return true;
+    }
+
+    /**
+     * @brief Take the capture timestamp of the oldest frame that was submitted to NVENC.
+     *
+     * @return Capture timestamp of the oldest submitted frame, empty when the frame had no timestamp.
+     */
+    std::optional<std::chrono::steady_clock::time_point> pop_timestamp() {
+      if (pending_timestamps.empty()) {
+        return std::nullopt;
+      }
+
+      auto timestamp = pending_timestamps.front();
+      pending_timestamps.pop_front();
+      return timestamp;
+    }
+
+    /**
+     * @brief Ask NVENC to finish every frame still buffered by the rate control lookahead.
+     *
+     * @param out_frames Appended with every frame that NVENC drained.
+     * @return `true` on success, `false` on encoding failure.
+     */
+    bool flush(std::vector<nvenc::nvenc_encoded_frame> &out_frames) {
+      if (!device || !device->nvenc) {
+        return false;
+      }
+
+      return device->nvenc->flush(out_frames);
     }
 
   private:
     std::unique_ptr<platf::nvenc_encode_device_t> device;
     bool force_idr = false;
+    std::deque<std::optional<std::chrono::steady_clock::time_point>> pending_timestamps;  ///< Timestamps of the frames that NVENC has not finished yet.
   };
 
   /**
@@ -1913,6 +1952,32 @@ namespace video {
   }
 
   /**
+   * @brief Queue one packet for each frame that NVENC finished encoding.
+   *
+   * @param encoded_frames Frames reported by the encoder, in submission order.
+   * @param session Active NVENC encoder session.
+   * @param packets Output queue that receives the encoded packets.
+   * @param channel_data Platform or protocol state attached to the packet.
+   * @return 0 when packets are queued; nonzero when a frame carried no data.
+   */
+  int queue_nvenc_frames(std::vector<nvenc::nvenc_encoded_frame> &encoded_frames, nvenc_encode_session_t &session, safe::mail_raw_t::queue_t<packet_t> &packets, void *channel_data) {
+    for (auto &encoded_frame : encoded_frames) {
+      if (encoded_frame.data.empty()) {
+        BOOST_LOG(error) << "NvENC returned empty packet";
+        return -1;
+      }
+
+      auto packet = std::make_unique<packet_raw_generic>(std::move(encoded_frame.data), encoded_frame.frame_index, encoded_frame.idr);
+      packet->channel_data = channel_data;
+      packet->after_ref_frame_invalidation = encoded_frame.after_ref_frame_invalidation;
+      packet->frame_timestamp = session.pop_timestamp();
+      packets->raise(std::move(packet));
+    }
+
+    return 0;
+  }
+
+  /**
    * @brief Encode one frame through NVENC and queue the resulting packet.
    *
    * @param frame_nr Monotonic frame index assigned by the video pipeline.
@@ -1923,23 +1988,41 @@ namespace video {
    * @return 0 when packets are queued; nonzero when NVENC encoding fails.
    */
   int encode_nvenc(int64_t frame_nr, nvenc_encode_session_t &session, safe::mail_raw_t::queue_t<packet_t> &packets, void *channel_data, std::optional<std::chrono::steady_clock::time_point> frame_timestamp) {
-    auto encoded_frame = session.encode_frame(frame_nr);
-    if (encoded_frame.data.empty()) {
-      BOOST_LOG(error) << "NvENC returned empty packet";
+    std::vector<nvenc::nvenc_encoded_frame> encoded_frames;
+
+    // Rate control lookahead makes NVENC buffer frames internally, so a submission does not always
+    // produce a packet and a single call can finish several frames that were submitted earlier.
+    if (!session.encode_frame(frame_nr, frame_timestamp, encoded_frames)) {
+      BOOST_LOG(error) << "NvEnc failed to encode a frame";
       return -1;
     }
 
-    if (frame_nr != encoded_frame.frame_index) {
-      BOOST_LOG(error) << "NvENC frame index mismatch " << frame_nr << " " << encoded_frame.frame_index;
+    for (const auto &encoded_frame : encoded_frames) {
+      if (frame_nr < static_cast<int64_t>(encoded_frame.frame_index)) {
+        BOOST_LOG(error) << "NvEnc frame index mismatch " << frame_nr << " " << encoded_frame.frame_index;
+      }
     }
 
-    auto packet = std::make_unique<packet_raw_generic>(std::move(encoded_frame.data), encoded_frame.frame_index, encoded_frame.idr);
-    packet->channel_data = channel_data;
-    packet->after_ref_frame_invalidation = encoded_frame.after_ref_frame_invalidation;
-    packet->frame_timestamp = frame_timestamp;
-    packets->raise(std::move(packet));
+    return queue_nvenc_frames(encoded_frames, session, packets, channel_data);
+  }
 
-    return 0;
+  /**
+   * @brief Drain the frames NVENC still buffers and queue the resulting packets.
+   *
+   * @param session Active NVENC encoder session.
+   * @param packets Output queue that receives the encoded packets.
+   * @param channel_data Platform or protocol state attached to the packet.
+   * @return 0 when packets are queued; nonzero when NVENC fails to drain.
+   */
+  int flush_nvenc(nvenc_encode_session_t &session, safe::mail_raw_t::queue_t<packet_t> &packets, void *channel_data) {
+    std::vector<nvenc::nvenc_encoded_frame> encoded_frames;
+
+    if (!session.flush(encoded_frames)) {
+      BOOST_LOG(error) << "NvEnc failed to drain the encoder";
+      return -1;
+    }
+
+    return queue_nvenc_frames(encoded_frames, session, packets, channel_data);
   }
 
   /**
@@ -2212,6 +2295,11 @@ namespace video {
       for (auto &option : video_format.common_options) {
         handle_option(option);
       }
+#ifndef __APPLE__
+      if (retries == 0 && encoder.name == "nvenc" && config::video.nv.lookahead_depth > 0) {
+        BOOST_LOG(warning) << "Rate control lookahead is not applied by the FFmpeg NVENC encoder, use the standalone NVENC encoder to enable it"sv;
+      }
+#endif
       for (auto &option : (config.dynamicRange ? video_format.hdr_options : video_format.sdr_options)) {
         handle_option(option);
       }
@@ -2253,8 +2341,8 @@ namespace video {
           ctx->rc_buffer_size = bitrate / config.framerate;
 
 #ifndef __APPLE__
-          if (encoder.name == "nvenc" && config::video.nv_legacy.vbv_percentage_increase > 0) {
-            ctx->rc_buffer_size += ctx->rc_buffer_size * config::video.nv_legacy.vbv_percentage_increase / 100;
+          if (encoder.name == "nvenc" && config::video.nv_legacy.vbv_ms > 0) {
+            ctx->rc_buffer_size = bitrate / 1000 * config::video.nv_legacy.vbv_ms;
           }
 #endif
         }
@@ -2523,6 +2611,16 @@ namespace video {
       // While streaming check to see if the mouse is present and enable Mouse Keys to force the cursor to appear
       // This is useful for KVM switch scenarios where mouse may disappear during streaming
       platf::enable_mouse_keys();
+    }
+
+    // Rate control lookahead buffers frames inside NVENC, so the tail of the stream has to be drained
+    // before the encoder is torn down. Packets are pointless once the stream is shutting down.
+    if (!shutdown_event->peek()) {
+      if (auto nvenc_session = dynamic_cast<nvenc_encode_session_t *>(session.get())) {
+        if (flush_nvenc(*nvenc_session, packets, channel_data)) {
+          BOOST_LOG(warning) << "Could not drain the remaining video packets"sv;
+        }
+      }
     }
   }
 
@@ -3047,10 +3145,26 @@ namespace video {
     session->request_idr_frame();
 
     auto packets = mail::man->queue<packet_t>(mail::video_packets);
-    while (!packets->peek()) {
-      if (encode(1, *session, packets, nullptr, {})) {
+
+    // Rate control lookahead buffers several frames before the encoder emits the first packet, so the
+    // probe has to keep feeding frames instead of repeating a single submission until one appears.
+    const auto max_probe_frames = std::max(config::video.nv.lookahead_depth, 0) + 8;
+    for (int probe_frame = 1; probe_frame <= max_probe_frames && !packets->peek(); ++probe_frame) {
+      if (encode(probe_frame, *session, packets, nullptr, {})) {
         return -1;
       }
+    }
+
+    // The lookahead window may still hold the first picture, in which case it has to be drained
+    if (!packets->peek()) {
+      if (auto nvenc_session = dynamic_cast<nvenc_encode_session_t *>(session.get())) {
+        flush_nvenc(*nvenc_session, packets, nullptr);
+      }
+    }
+
+    if (!packets->peek()) {
+      BOOST_LOG(error) << "Encoder did not produce a packet while probing"sv;
+      return -1;
     }
 
     auto packet = packets->pop();

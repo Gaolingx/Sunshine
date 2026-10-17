@@ -495,6 +495,10 @@ namespace platf::dxgi {
           return -1;
         }
 
+        auto &out_Y_or_YUV_rtv = out_Y_or_YUV_rtvs[current_output];
+        auto &out_UV_rtv = out_UV_rtvs[current_output];
+        auto &rtvs_cleared = output_rtvs_cleared[current_output];
+
         // Acquire encoder mutex to synchronize with capture code
         auto status = img_ctx.encoder_mutex->AcquireSync(0, INFINITE);
         if (status != S_OK) {
@@ -576,17 +580,45 @@ namespace platf::dxgi {
     }
 
     /**
+     * @brief Select the output texture that receives the next converted frame.
+     *
+     * @param frame_texture Output texture to bind, must be one of the encoder input textures.
+     * @return 0 when the texture is known to the device, nonzero otherwise.
+     */
+    int select_output(ID3D11Texture2D *frame_texture) {
+      for (std::size_t i = 0; i < output_textures.size(); i++) {
+        if (output_textures[i].get() == frame_texture) {
+          current_output = i;
+          return 0;
+        }
+      }
+
+      BOOST_LOG(error) << "Output texture is not registered with the encode device"sv;
+      return -1;
+    }
+
+    /**
      * @brief Create D3D11 output textures, views, and shaders for frame conversion.
      *
-     * @param frame_texture Frame texture.
+     * @param frame_textures Encoder input textures that are written by the conversion.
      * @param width Frame or display width in pixels.
      * @param height Frame or display height in pixels.
      * @return 0 when output resources are initialized; nonzero on D3D failure.
      */
-    int init_output(ID3D11Texture2D *frame_texture, int width, int height) {
-      // The underlying frame pool owns the texture, so we must reference it for ourselves
-      frame_texture->AddRef();
-      output_texture.reset(frame_texture);
+    int init_output(const std::vector<ID3D11Texture2D *> &frame_textures, int width, int height) {
+      if (frame_textures.empty()) {
+        BOOST_LOG(error) << "No output textures were provided to the encode device"sv;
+        return -1;
+      }
+
+      output_textures.clear();
+      output_textures.reserve(frame_textures.size());
+      for (auto frame_texture : frame_textures) {
+        // The underlying frame pool owns the texture, so we must reference it for ourselves
+        frame_texture->AddRef();
+        output_textures.emplace_back(frame_texture);
+      }
+      current_output = 0;
 
       HRESULT status = S_OK;
 
@@ -773,42 +805,51 @@ namespace platf::dxgi {
           return -1;
       }
 
-      auto create_rtv = [&](auto &rt, DXGI_FORMAT rt_format) -> bool {
-        D3D11_RENDER_TARGET_VIEW_DESC rtv_desc = {};
-        rtv_desc.Format = rt_format;
-        rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+      out_Y_or_YUV_rtvs.clear();
+      out_UV_rtvs.clear();
+      output_rtvs_cleared.clear();
+      out_Y_or_YUV_rtvs.resize(output_textures.size());
+      out_UV_rtvs.resize(output_textures.size());
+      output_rtvs_cleared.resize(output_textures.size());
 
-        auto status = device->CreateRenderTargetView(output_texture.get(), &rtv_desc, &rt);
-        if (FAILED(status)) {
-          BOOST_LOG(error) << "Failed to create render target view: " << util::log_hex(status);
-          return false;
+      for (std::size_t i = 0; i < output_textures.size(); i++) {
+        auto create_rtv = [&](auto &rt, DXGI_FORMAT rt_format) -> bool {
+          D3D11_RENDER_TARGET_VIEW_DESC rtv_desc = {};
+          rtv_desc.Format = rt_format;
+          rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+
+          auto status = device->CreateRenderTargetView(output_textures[i].get(), &rtv_desc, &rt);
+          if (FAILED(status)) {
+            BOOST_LOG(error) << "Failed to create render target view: " << util::log_hex(status);
+            return false;
+          }
+
+          return true;
+        };
+
+        // Create Y/YUV render target view
+        if (!create_rtv(out_Y_or_YUV_rtvs[i], rtv_Y_or_YUV_format)) {
+          return -1;
         }
 
-        return true;
-      };
-
-      // Create Y/YUV render target view
-      if (!create_rtv(out_Y_or_YUV_rtv, rtv_Y_or_YUV_format)) {
-        return -1;
-      }
-
-      // Create UV render target view if needed
-      if (rtv_UV_format != DXGI_FORMAT_UNKNOWN && !create_rtv(out_UV_rtv, rtv_UV_format)) {
-        return -1;
-      }
-
-      if (rtv_simple_clear) {
-        // Clear the RTVs to ensure the aspect ratio padding is black
-        const float y_black[] = {0.0f, 0.0f, 0.0f, 0.0f};
-        device_ctx->ClearRenderTargetView(out_Y_or_YUV_rtv.get(), y_black);
-        if (out_UV_rtv) {
-          const float uv_black[] = {0.5f, 0.5f, 0.5f, 0.5f};
-          device_ctx->ClearRenderTargetView(out_UV_rtv.get(), uv_black);
+        // Create UV render target view if needed
+        if (rtv_UV_format != DXGI_FORMAT_UNKNOWN && !create_rtv(out_UV_rtvs[i], rtv_UV_format)) {
+          return -1;
         }
-        rtvs_cleared = true;
-      } else {
-        // Can't use ClearRenderTargetView(), will clear on first convert()
-        rtvs_cleared = false;
+
+        if (rtv_simple_clear) {
+          // Clear the RTVs to ensure the aspect ratio padding is black
+          const float y_black[] = {0.0f, 0.0f, 0.0f, 0.0f};
+          device_ctx->ClearRenderTargetView(out_Y_or_YUV_rtvs[i].get(), y_black);
+          if (out_UV_rtvs[i]) {
+            const float uv_black[] = {0.5f, 0.5f, 0.5f, 0.5f};
+            device_ctx->ClearRenderTargetView(out_UV_rtvs[i].get(), uv_black);
+          }
+          output_rtvs_cleared[i] = 1;
+        } else {
+          // Can't use ClearRenderTargetView(), will clear on first convert()
+          output_rtvs_cleared[i] = 0;
+        }
       }
 
       return 0;
@@ -1061,9 +1102,12 @@ namespace platf::dxgi {
     blend_t blend_disable;  ///< Blend disable.
     sampler_state_t sampler_linear;  ///< Sampler linear.
 
-    render_target_t out_Y_or_YUV_rtv;  ///< Out y or YUV rtv.
-    render_target_t out_UV_rtv;  ///< Out UV rtv.
-    bool rtvs_cleared = false;  ///< Whether render-target views have been cleared for the frame.
+    std::vector<texture2d_t> output_textures;  ///< Encoder input textures written by the conversion.
+    std::size_t current_output = 0;  ///< Index of the output texture that receives the next conversion.
+
+    std::vector<render_target_t> out_Y_or_YUV_rtvs;  ///< Y/YUV render target views, one per output texture.
+    std::vector<render_target_t> out_UV_rtvs;  ///< UV render target views, one per output texture.
+    std::vector<std::uint8_t> output_rtvs_cleared;  ///< Whether each output render-target view has been cleared once.
 
     // d3d_img_t::id -> encoder_img_ctx_t
     // These store the encoder textures for each img_t that passes through
@@ -1090,8 +1134,6 @@ namespace platf::dxgi {
 
     device_t device;  ///< D3D11 device used for encoder-side texture conversion.
     device_ctx_t device_ctx;  ///< D3D11 device context used to issue conversion commands.
-
-    texture2d_t output_texture;  ///< Output texture.
   };
 
   /**
@@ -1214,7 +1256,7 @@ namespace platf::dxgi {
         frame_texture = (ID3D11Texture2D *) frame->data[0];
       }
 
-      return base.init_output(frame_texture, frame->width, frame->height);
+      return base.init_output({frame_texture}, frame->width, frame->height);
     }
 
   private:
@@ -1277,7 +1319,15 @@ namespace platf::dxgi {
       }
 
       base.apply_colorspace(colorspace);
-      return base.init_output(nvenc_d3d->get_input_texture(), client_config.width, client_config.height) == 0;
+
+      std::vector<ID3D11Texture2D *> input_textures;
+      auto texture_count = nvenc_d3d->get_input_texture_count();
+      input_textures.reserve(texture_count);
+      for (std::size_t i = 0; i < texture_count; i++) {
+        input_textures.push_back(nvenc_d3d->get_input_texture(i));
+      }
+
+      return base.init_output(input_textures, client_config.width, client_config.height) == 0;
     }
 
     /**
@@ -1287,6 +1337,16 @@ namespace platf::dxgi {
      * @return Conversion status.
      */
     int convert(platf::img_t &img_base) override {
+      auto input_texture = nvenc_d3d->acquire_input_texture();
+      if (!input_texture) {
+        BOOST_LOG(error) << "NvEnc: no free input surface for the next frame"sv;
+        return -1;
+      }
+
+      if (base.select_output(input_texture)) {
+        return -1;
+      }
+
       return base.convert(img_base);
     }
 

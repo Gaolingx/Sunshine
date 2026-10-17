@@ -1615,7 +1615,8 @@ namespace config {
     string_f(vars, "sw_tune", video.sw.sw_tune);
 
     int_between_f(vars, "nvenc_preset", video.nv.quality_preset, {1, 7});
-    int_between_f(vars, "nvenc_vbv_increase", video.nv.vbv_percentage_increase, {0, 400});
+    int_between_f(vars, "nvenc_vbv_ms", video.nv.vbv_milliseconds, {0, 1000});
+    int_between_f(vars, "nvenc_lookahead_depth", video.nv.lookahead_depth, {0, nvenc::max_lookahead_depth});
     int_between_f(vars, "nvenc_ldkfs", video.nv.low_delay_key_frame_scale, {0, 10});
     bool_f(vars, "nvenc_spatial_aq", video.nv.adaptive_quantization);
     int_between_f(vars, "nvenc_aq_strength", video.nv.aq_strength, {0, 15});
@@ -1644,7 +1645,7 @@ namespace config {
                                                                                                  NV_ENC_MULTI_PASS_DISABLED;
     video.nv_legacy.h264_coder = video.nv.h264_cavlc ? NV_ENC_H264_ENTROPY_CODING_MODE_CAVLC : NV_ENC_H264_ENTROPY_CODING_MODE_CABAC;
     video.nv_legacy.spatial_aq = video.nv.adaptive_quantization;
-    video.nv_legacy.vbv_percentage_increase = video.nv.vbv_percentage_increase;
+    video.nv_legacy.vbv_ms = video.nv.vbv_milliseconds;
     video.nv_legacy.ldkfs = video.nv.low_delay_key_frame_scale;
     video.nv_legacy.aq_strength = video.nv.aq_strength;
     video.nv_legacy.temporal_aq = video.nv.temporal_adaptive_quantization;
