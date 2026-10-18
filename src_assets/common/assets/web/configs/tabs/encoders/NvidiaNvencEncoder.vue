@@ -57,14 +57,6 @@ const config = ref(props.config)
               default="false"
     ></Checkbox>
 
-    <!-- Temporal AQ -->
-    <Checkbox class="mb-3"
-              id="nvenc_temporal_aq"
-              locale-prefix="config"
-              v-model="config.nvenc_temporal_aq"
-              default="false"
-    ></Checkbox>
-
     <!-- Adaptive quantization strength -->
     <div class="mb-3">
       <label for="nvenc_aq_strength" class="form-label">{{ $t('config.nvenc_aq_strength') }}</label>
@@ -91,6 +83,14 @@ const config = ref(props.config)
       <input type="number" min="0" max="16" class="form-control" id="nvenc_lookahead_depth" placeholder="0"
              v-model="config.nvenc_lookahead_depth" />
       <div class="form-text">{{ $t('config.nvenc_lookahead_depth_desc') }}</div>
+    </div>
+
+    <!-- Rate control lookahead level -->
+    <div class="mb-3">
+      <label for="nvenc_lookahead_level" class="form-label">{{ $t('config.nvenc_lookahead_level') }}</label>
+      <input type="number" min="0" max="3" class="form-control" id="nvenc_lookahead_level" placeholder="0"
+             v-model="config.nvenc_lookahead_level" />
+      <div class="form-text">{{ $t('config.nvenc_lookahead_level_desc') }}</div>
     </div>
 
     <!-- Advanced compression options -->

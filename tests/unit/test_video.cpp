@@ -99,18 +99,16 @@ TEST(NvencAvcodecOptionsTest, ExposesBitrateEfficiencyOptions) {
     &video::nvenc.h264,
   };
 
-  const std::array<std::string_view, 5> option_names {
+  const std::array<std::string_view, 4> option_names {
     "ldkfs"sv,
     "aq-strength"sv,
-    "temporal-aq"sv,
     "nonref_p"sv,
     "weighted_pred"sv,
   };
 
-  const std::array<int *, 5> expected_targets {
+  const std::array<int *, 4> expected_targets {
     &config::video.nv_legacy.ldkfs,
     &config::video.nv_legacy.aq_strength,
-    &config::video.nv_legacy.temporal_aq,
     &config::video.nv_legacy.nonref_p,
     &config::video.nv_legacy.weighted_pred,
   };
@@ -152,16 +150,13 @@ struct NvencQualityOptionsTest: BaseTest {
 TEST_F(NvencQualityOptionsTest, AppliesAdaptiveQuantizationSettings) {
   config::apply_config_for_test(
     "nvenc_spatial_aq = enabled\n"
-    "nvenc_temporal_aq = enabled\n"
     "nvenc_aq_strength = 9\n"
   );
 
   EXPECT_TRUE(config::video.nv.adaptive_quantization);
-  EXPECT_TRUE(config::video.nv.temporal_adaptive_quantization);
   EXPECT_EQ(9, config::video.nv.aq_strength);
 #if !defined(__ANDROID__) && !defined(__APPLE__)
   EXPECT_EQ(1, config::video.nv_legacy.spatial_aq);
-  EXPECT_EQ(1, config::video.nv_legacy.temporal_aq);
   EXPECT_EQ(9, config::video.nv_legacy.aq_strength);
 #endif
 }
@@ -238,6 +233,18 @@ TEST_F(NvencQualityOptionsTest, KeepsLookaheadDisabledWhenDepthIsOutOfRange) {
   EXPECT_EQ(0, config::video.nv.lookahead_depth);
 }
 
+TEST_F(NvencQualityOptionsTest, AppliesLookaheadLevel) {
+  config::apply_config_for_test("nvenc_lookahead_level = 2\n");
+
+  EXPECT_EQ(2, config::video.nv.lookahead_level);
+}
+
+TEST_F(NvencQualityOptionsTest, KeepsDriverDefaultLookaheadLevelWhenOutOfRange) {
+  config::apply_config_for_test("nvenc_lookahead_level = 4\n");
+
+  EXPECT_EQ(0, config::video.nv.lookahead_level);
+}
+
 #if !defined(__APPLE__)
 /**
  * @brief Regression coverage for the NVENC rate control lookahead pipeline.
@@ -252,6 +259,7 @@ struct NvencLookaheadTest: PlatformTestSuite {
     original_nv = config::video.nv;
     config::video.nv = nvenc::nvenc_config {};
     config::video.nv.lookahead_depth = 4;
+    config::video.nv.lookahead_level = 2;
     config::video.nv.vbv_milliseconds = 300;
   }
 

@@ -17,6 +17,11 @@ namespace nvenc {
   constexpr int max_lookahead_depth = 16;
 
   /**
+   * @brief Maximum rate control lookahead level defined by the NVENC SDK.
+   */
+  constexpr int max_lookahead_level = 3;
+
+  /**
    * @brief Maximum target buffer size used when deriving a millisecond based VBV/HRD.
    *
    * The video protocol can only carry a limited amount of data for a single encoded frame,
@@ -64,9 +69,6 @@ namespace nvenc {
     // AQ strength from 1 to 15, zero uses the driver default
     int aq_strength = 0;  ///< Adaptive quantization strength.
 
-    // Allocate more bitrate to frames that are temporally more important, may conflict with strict CBR, uses CUDA cores
-    bool temporal_adaptive_quantization = false;  ///< Enable temporal adaptive quantization for NVENC.
-
     // Insert automatically chosen non-reference P-frames, saves bitrate on static content
     bool non_reference_p_frames = false;  ///< Enable non-reference P-frames for NVENC.
 
@@ -108,6 +110,9 @@ namespace nvenc {
 
     // Number of frames the rate control may look ahead, zero disables lookahead buffering
     int lookahead_depth = 0;  ///< Rate control lookahead depth in frames.
+
+    // Analysis level of the rate control lookahead, zero keeps the level derived from the tuning info
+    int lookahead_level = 0;  ///< Rate control lookahead analysis level.
   };
 
   /**

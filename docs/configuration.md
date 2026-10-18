@@ -2407,40 +2407,13 @@ supported on the current platform.
     </tr>
 </table>
 
-### nvenc_temporal_aq
-
-<table>
-    <tr>
-        <td>Description</td>
-        <td colspan="2">
-            Assign more bits to frames that are temporally more important for the frames referencing them.
-            Compared to spatial AQ this improves perceived quality of motion at low bitrates, but it makes the number
-            of bits consumed per frame fluctuate more within a GOP, which works against a strict constant bitrate.
-            @note{This option only applies when using NVENC [encoder](#encoder).}
-            @warning{Enabling this option may reduce performance.}
-        </td>
-    </tr>
-    <tr>
-        <td>Default</td>
-        <td colspan="2">@code{}
-            disabled
-            @endcode</td>
-    </tr>
-    <tr>
-        <td>Example</td>
-        <td colspan="2">@code{}
-            nvenc_temporal_aq = disabled
-            @endcode</td>
-    </tr>
-</table>
-
 ### nvenc_aq_strength
 
 <table>
     <tr>
         <td>Description</td>
         <td colspan="2">
-            Strength of adaptive quantization when spatial or temporal AQ is enabled. The scale runs from 1 (low) to
+            Strength of adaptive quantization when spatial AQ is enabled. The scale runs from 1 (low) to
             15 (aggressive), higher values redistribute more bits towards perceptually important regions at the cost of
             a more uneven quantization.
             @note{This option only applies when using NVENC [encoder](#encoder).}
@@ -2531,6 +2504,39 @@ supported on the current platform.
         <td>Example</td>
         <td colspan="2">@code{}
             nvenc_lookahead_depth = 0
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_lookahead_level
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Depth of the analysis the rate controller applies inside the lookahead window.
+            A higher level spends more encoder time on the same buffered frames, which raises compression efficiency
+            without adding buffering, so the end to end latency is unchanged.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+            @note{A value of 0 keeps the level derived from the tuning info.}
+            @note{Requires a non-zero [nvenc_lookahead_depth](#nvenc_lookahead_depth) and NVENC API 13.0.}
+            @note{Values above 3 are clamped to 3, and values above the level the gpu supports are clamped to it.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            0
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">0-3</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_lookahead_level = 0
             @endcode</td>
     </tr>
 </table>

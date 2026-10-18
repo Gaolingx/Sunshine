@@ -284,13 +284,6 @@ namespace NVENC_NAMESPACE {
       enc_config.rcParams.aqStrength = std::min(config.aq_strength, 15);
     }
     enc_config.rcParams.enableNonRefP = config.non_reference_p_frames;
-    if (config.temporal_adaptive_quantization) {
-      if (get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ)) {
-        enc_config.rcParams.enableTemporalAQ = 1;
-      } else {
-        BOOST_LOG(warning) << "NvEnc: gpu doesn't support temporal AQ";
-      }
-    }
     enc_config.rcParams.averageBitRate = client_config.bitrate * 1000;
     if (get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE)) {
       const auto buffer_size = ::nvenc::vbv_buffer_size_bits(config, client_config.framerate, client_config.bitrate);
@@ -316,6 +309,9 @@ namespace NVENC_NAMESPACE {
     const GUID &encode_guid
   ) {
     if (config.lookahead_depth <= 0) {
+      if (config.lookahead_level > 0) {
+        BOOST_LOG(warning) << "NvEnc: lookahead level has no effect without a lookahead depth";
+      }
       return;
     }
 
@@ -333,6 +329,28 @@ namespace NVENC_NAMESPACE {
     enc_config.rcParams.disableIadapt = 1;
     // Adaptive B-frame insertion is meaningless without B-frames, disable it to keep the output order fixed
     enc_config.rcParams.disableBadapt = 1;
+
+#if NVENC_SDK_VERSION >= 1300
+    if (config.lookahead_level > 0) {
+      // The capability reports the highest level the gpu can sustain. A higher level only spends more
+      // encoder time on the same lookahead window, so it improves quality without adding latency.
+      const auto supported_level = get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_LOOKAHEAD_LEVEL);
+      const auto level = std::min({config.lookahead_level, ::nvenc::max_lookahead_level, supported_level});
+      if (level <= 0) {
+        BOOST_LOG(warning) << "NvEnc: gpu doesn't support a configurable lookahead level";
+      } else {
+        enc_config.rcParams.lookaheadLevel = static_cast<NV_ENC_LOOKAHEAD_LEVEL>(level);
+        if (level < config.lookahead_level) {
+          BOOST_LOG(warning) << "NvEnc: lookahead level "sv << config.lookahead_level
+                             << " is above the supported maximum, using "sv << level;
+        }
+      }
+    }
+#else
+    if (config.lookahead_level > 0) {
+      BOOST_LOG(warning) << "NvEnc: lookahead level requires NVENC API 13.0; ignoring it";
+    }
+#endif
 
     if (depth < config.lookahead_depth) {
       BOOST_LOG(warning) << "NvEnc: lookahead depth "sv << config.lookahead_depth
@@ -589,6 +607,7 @@ namespace NVENC_NAMESPACE {
     }
     return create_and_register_input_buffer();
   }
+
   void nvenc_base::log_created_encoder(
     const NV_ENC_INITIALIZE_PARAMS &init_params,
     const NV_ENC_CONFIG &enc_config,
@@ -617,6 +636,11 @@ namespace NVENC_NAMESPACE {
     }
     if (enc_config.rcParams.enableLookahead) {
       extra += std::format(" lookahead={}", enc_config.rcParams.lookaheadDepth);
+#if NVENC_SDK_VERSION >= 1300
+      if (config.lookahead_level > 0) {
+        extra += std::format("/{}", static_cast<int>(enc_config.rcParams.lookaheadLevel));
+      }
+#endif
     }
     if (config.low_delay_key_frame_scale > 0) {
       extra += std::format(" ldkfs={}", config.low_delay_key_frame_scale);
@@ -632,9 +656,6 @@ namespace NVENC_NAMESPACE {
     }
     if (enc_config.rcParams.aqStrength != 0) {
       extra += std::format(" aq-strength={}", enc_config.rcParams.aqStrength);
-    }
-    if (enc_config.rcParams.enableTemporalAQ) {
-      extra += " temporal-aq";
     }
     if (enc_config.rcParams.enableNonRefP) {
       extra += " nonref-p";
