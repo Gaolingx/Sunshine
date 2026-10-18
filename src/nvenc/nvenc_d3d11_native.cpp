@@ -36,10 +36,6 @@ namespace NVENC_NAMESPACE {
   }
 
   bool nvenc_d3d11_native::copy_input_surface(std::size_t from, std::size_t to) {
-    if (from >= d3d_input_textures.size() || to >= d3d_input_textures.size()) {
-      return false;
-    }
-
     ID3D11DeviceContextPtr d3d_context;
     d3d_device->GetImmediateContext(&d3d_context);
     if (!d3d_context) {
@@ -58,7 +54,7 @@ namespace NVENC_NAMESPACE {
     }
 
     if (d3d_input_textures.empty()) {
-      d3d_input_textures.resize(input_surface_count);
+      d3d_input_textures.resize(slots.size());
 
       D3D11_TEXTURE2D_DESC desc = {};
       desc.Width = encoder_params.width;
@@ -78,23 +74,21 @@ namespace NVENC_NAMESPACE {
       }
     }
 
-    if (registered_input_buffers.empty()) {
-      for (auto &texture : d3d_input_textures) {
-        NV_ENC_REGISTER_RESOURCE register_resource = {.version = NV_ENC_REGISTER_RESOURCE_VER};
-        register_resource.resourceType = NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX;
-        register_resource.width = encoder_params.width;
-        register_resource.height = encoder_params.height;
-        register_resource.resourceToRegister = texture.GetInterfacePtr();
-        register_resource.bufferFormat = encoder_params.buffer_format;
-        register_resource.bufferUsage = NV_ENC_INPUT_IMAGE;
+    for (std::size_t i = 0; i < slots.size(); i++) {
+      NV_ENC_REGISTER_RESOURCE register_resource = {.version = NV_ENC_REGISTER_RESOURCE_VER};
+      register_resource.resourceType = NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX;
+      register_resource.width = encoder_params.width;
+      register_resource.height = encoder_params.height;
+      register_resource.resourceToRegister = d3d_input_textures[i].GetInterfacePtr();
+      register_resource.bufferFormat = encoder_params.buffer_format;
+      register_resource.bufferUsage = NV_ENC_INPUT_IMAGE;
 
-        if (nvenc_failed(nvenc->nvEncRegisterResource(encoder, &register_resource))) {
-          BOOST_LOG(error) << "NvEnc: NvEncRegisterResource() failed: " << last_nvenc_error_string;
-          return false;
-        }
-
-        registered_input_buffers.push_back(register_resource.registeredResource);
+      if (nvenc_failed(nvenc->nvEncRegisterResource(encoder, &register_resource))) {
+        BOOST_LOG(error) << "NvEnc: NvEncRegisterResource() failed: " << last_nvenc_error_string;
+        return false;
       }
+
+      slots[i].registered = register_resource.registeredResource;
     }
 
     return true;

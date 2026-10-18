@@ -58,7 +58,6 @@ namespace NVENC_NAMESPACE {
      * @param dll Shared NVENC driver module.
      */
     explicit nvenc_d3d11(NV_ENC_DEVICE_TYPE device_type, ::nvenc::shared_dll dll);
-    ~nvenc_d3d11() override;
 
     /**
      * @brief Number of input textures the encoder rotates through.
@@ -81,7 +80,6 @@ namespace NVENC_NAMESPACE {
 
   protected:
     bool init_library() override;
-    bool wait_for_async_event(uint32_t timeout_ms) override;
 
   private:
     ::nvenc::shared_dll dll;

@@ -84,24 +84,14 @@ TEST(NvencConfigTest, ReportsNoBufferForDegenerateBitrateOrFramerate) {
 }
 
 TEST(NvencConfigTest, UsesOneInputSurfaceWhenLookaheadIsDisabled) {
-  nvenc::nvenc_config config;
-
-  EXPECT_EQ(1u, nvenc::input_surface_count(config));
-
-  config.lookahead_depth = 0;
-  EXPECT_EQ(1u, nvenc::input_surface_count(config));
-
-  config.lookahead_depth = -1;
-  EXPECT_EQ(1u, nvenc::input_surface_count(config));
+  EXPECT_EQ(1u, nvenc::input_surface_count(0));
+  EXPECT_EQ(1u, nvenc::input_surface_count(-1));
 }
 
-TEST(NvencConfigTest, ReservesSurfaceSlackForTheLookaheadWindow) {
-  nvenc::nvenc_config config;
-
+TEST(NvencConfigTest, ReservesOneSurfacePerLookaheadDepthPlusTwoSlots) {
   for (int depth = 1; depth <= nvenc::max_lookahead_depth; ++depth) {
-    config.lookahead_depth = depth;
-    const auto surfaces = nvenc::input_surface_count(config);
-    EXPECT_EQ(static_cast<std::size_t>(depth) + 6, surfaces);
+    const auto surfaces = nvenc::input_surface_count(depth);
+    EXPECT_EQ(static_cast<std::size_t>(depth) + 2, surfaces);
     EXPECT_GT(surfaces, static_cast<std::size_t>(depth));
   }
 }

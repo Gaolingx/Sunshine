@@ -52,7 +52,7 @@ namespace {
     void destroy_encoder() override {
     }
 
-    bool encode_frame(std::uint64_t frame_index, bool force_idr, std::vector<nvenc::nvenc_encoded_frame> &out_frames) override {
+    bool encode_frame(std::uint64_t frame_index, bool force_idr, bool, std::vector<nvenc::nvenc_encoded_frame> &out_frames) override {
       out_frames.push_back({{}, frame_index, force_idr, false});
       return true;
     }
@@ -63,6 +63,10 @@ namespace {
 
     bool invalidate_ref_frames(std::uint64_t, std::uint64_t) override {
       return true;
+    }
+
+    int lookahead_depth() const override {
+      return 0;
     }
 
     std::size_t get_input_texture_count() const override {

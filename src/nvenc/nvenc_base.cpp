@@ -25,8 +25,6 @@ namespace {
 
   using namespace NVENC_NAMESPACE;
 
-  constexpr int encode_wait_timeout_ms = 100;  ///< Maximum time to wait for the driver to report a finished picture.
-
   /**
    * @brief Determine whether an NVENC buffer format stores 10-bit samples.
    *
@@ -220,10 +218,6 @@ namespace NVENC_NAMESPACE {
       BOOST_LOG(error) << "NvEnc: gpu doesn't support YUV444 encode";
       return false;
     }
-    if (async_event_handle && !get_encoder_cap(encode_guid, NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT)) {
-      BOOST_LOG(warning) << "NvEnc: gpu doesn't support async encode";
-      async_event_handle = nullptr;
-    }
     encoder_params.rfi = get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION);
     return true;
   }
@@ -319,6 +313,7 @@ namespace NVENC_NAMESPACE {
 
     enc_config.rcParams.enableLookahead = 1;
     enc_config.rcParams.lookaheadDepth = static_cast<uint16_t>(depth);
+    encoder_params.lookahead_depth = depth;
     // Adaptive I-frame insertion would break the infinite GOP and produce unpredictable bitrate spikes
     enc_config.rcParams.disableIadapt = 1;
     // Adaptive B-frame insertion is meaningless without B-frames, disable it to keep the output order fixed
@@ -574,24 +569,21 @@ namespace NVENC_NAMESPACE {
       BOOST_LOG(error) << "NvEnc: NvEncInitializeEncoder() failed: " << last_nvenc_error_string;
       return false;
     }
-    if (async_event_handle) {
-      NV_ENC_EVENT_PARAMS event_params = {.version = NV_ENC_EVENT_PARAMS_VER};
-      event_params.completionEvent = async_event_handle;
-      if (nvenc_failed(nvenc->nvEncRegisterAsyncEvent(encoder, &event_params))) {
-        BOOST_LOG(error) << "NvEnc: NvEncRegisterAsyncEvent() failed: " << last_nvenc_error_string;
-        return false;
-      }
-    }
 
-    for (std::size_t i = 0; i < input_surface_count; i++) {
+    // Bitstream buffers are paired with input slots by index, and the driver writes the picture of
+    // slot i into bitstream i. Slots are sized here so that the platform layer can fill them in.
+    const auto slot_count = ::nvenc::input_surface_count(encoder_params.lookahead_depth);
+    slots.resize(slot_count);
+    bitstreams.reserve(slot_count);
+    for (std::size_t i = 0; i < slot_count; i++) {
       NV_ENC_CREATE_BITSTREAM_BUFFER create_bitstream_buffer = {.version = NV_ENC_CREATE_BITSTREAM_BUFFER_VER};
       if (nvenc_failed(nvenc->nvEncCreateBitstreamBuffer(encoder, &create_bitstream_buffer))) {
         BOOST_LOG(error) << "NvEnc: NvEncCreateBitstreamBuffer() failed: " << last_nvenc_error_string;
         return false;
       }
-      output_bitstreams.push_back(create_bitstream_buffer.bitstreamBuffer);
-      free_output_bitstreams.push_back(create_bitstream_buffer.bitstreamBuffer);
+      bitstreams.push_back(create_bitstream_buffer.bitstreamBuffer);
     }
+
     return create_and_register_input_buffer();
   }
 
@@ -603,9 +595,6 @@ namespace NVENC_NAMESPACE {
     NV_ENC_BUFFER_FORMAT buffer_format
   ) const {
     std::string extra;
-    if (init_params.enableEncodeAsync) {
-      extra += " async";
-    }
     if (buffer_is_yuv444(buffer_format)) {
       extra += " yuv444";
     }
@@ -747,7 +736,9 @@ namespace NVENC_NAMESPACE {
     init_params.presetGUID = quality_preset_guid_from_number(config.quality_preset);
     init_params.tuningInfo = NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY;
     init_params.enablePTD = 1;
-    init_params.enableEncodeAsync = async_event_handle ? 1 : 0;
+    // Synchronous encoding: each nvEncEncodePicture() call finishes one picture, which lets the
+    // slot ring derive ownership and progress from the returned status alone.
+    init_params.enableEncodeAsync = 0;
     init_params.enableWeightedPrediction = config.weighted_prediction &&
                                            get_encoder_cap(init_params.encodeGUID, NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION);
     init_params.encodeWidth = encoder_params.width;
@@ -773,7 +764,13 @@ namespace NVENC_NAMESPACE {
     configure_rate_control(enc_config, config, client_config, init_params.encodeGUID);
     configure_codec(enc_config, config, client_config, colorspace, buffer_format, init_params.encodeGUID);
     init_params.encodeConfig = &enc_config;
-    input_surface_count = ::nvenc::input_surface_count(config);
+
+    // Frames inside the lookahead window are already encoded when an invalidation request arrives,
+    // so nvEncInvalidateRefFrames() could never repair them. Recovery has to use a forced IDR.
+    if (encoder_params.lookahead_depth > 0) {
+      encoder_params.rfi = false;
+    }
+
     if (!initialize_encoder_resources(init_params)) {
       return false;
     }
@@ -798,42 +795,34 @@ namespace NVENC_NAMESPACE {
       flush(discarded);
     }
 
-    for (auto &submitted : submitted_frames) {
-      if (submitted.mapped_input_buffer && encoder) {
-        if (nvenc_failed(nvenc->nvEncUnmapInputResource(encoder, submitted.mapped_input_buffer))) {
+    for (auto &slot : slots) {
+      if (slot.mapped && encoder) {
+        if (nvenc_failed(nvenc->nvEncUnmapInputResource(encoder, slot.mapped))) {
           BOOST_LOG(error) << "NvEnc: NvEncUnmapInputResource() failed: " << last_nvenc_error_string;
         }
-        submitted.mapped_input_buffer = nullptr;
       }
+      slot.mapped = nullptr;
     }
-    for (auto bitstream : output_bitstreams) {
+
+    for (auto bitstream : bitstreams) {
       if (bitstream && encoder) {
         if (nvenc_failed(nvenc->nvEncDestroyBitstreamBuffer(encoder, bitstream))) {
           BOOST_LOG(error) << "NvEnc: NvEncDestroyBitstreamBuffer() failed: " << last_nvenc_error_string;
         }
       }
     }
-    output_bitstreams.clear();
-    free_output_bitstreams.clear();
-    pending_output_bitstreams.clear();
-    submitted_frames.clear();
-    in_flight_input_surfaces.clear();
-    next_input_surface = 0;
-    if (encoder && async_event_handle) {
-      NV_ENC_EVENT_PARAMS event_params = {.version = NV_ENC_EVENT_PARAMS_VER};
-      event_params.completionEvent = async_event_handle;
-      if (nvenc_failed(nvenc->nvEncUnregisterAsyncEvent(encoder, &event_params))) {
-        BOOST_LOG(error) << "NvEnc: NvEncUnregisterAsyncEvent() failed: " << last_nvenc_error_string;
-      }
-    }
-    for (auto registered_buffer : registered_input_buffers) {
-      if (registered_buffer && encoder) {
-        if (nvenc_failed(nvenc->nvEncUnregisterResource(encoder, registered_buffer))) {
+    bitstreams.clear();
+
+    for (auto &slot : slots) {
+      if (slot.registered && encoder) {
+        if (nvenc_failed(nvenc->nvEncUnregisterResource(encoder, slot.registered))) {
           BOOST_LOG(error) << "NvEnc: NvEncUnregisterResource() failed: " << last_nvenc_error_string;
         }
       }
+      slot.registered = nullptr;
     }
-    registered_input_buffers.clear();
+    slots.clear();
+
     if (encoder) {
       if (nvenc_failed(nvenc->nvEncDestroyEncoder(encoder))) {
         BOOST_LOG(error) << "NvEnc: NvEncDestroyEncoder() failed: " << last_nvenc_error_string;
@@ -841,9 +830,9 @@ namespace NVENC_NAMESPACE {
       encoder = nullptr;
     }
 
-    input_surface_count = 1;
+    submit_pos = 0;
+    reap_pos = 0;
     current_input_surface = 0;
-    input_surface_filled = false;
     encoder_state = {};
     encoder_params = {};
   }
@@ -853,22 +842,24 @@ namespace NVENC_NAMESPACE {
       return false;
     }
 
-    if (std::ranges::find(in_flight_input_surfaces, next_input_surface) != in_flight_input_surfaces.end()) {
-      BOOST_LOG(error) << "NvEnc: input surface " << next_input_surface << " is still owned by the driver";
+    // The ring only runs full when the driver stopped handing pictures back.
+    if (pending_count() >= slots.size()) {
+      BOOST_LOG(error) << "NvEnc: all " << slots.size() << " input surfaces are still owned by the driver";
       return false;
     }
 
-    current_input_surface = next_input_surface;
-    input_surface_filled = true;
+    current_input_surface = submit_pos;
     return true;
   }
 
-  bool nvenc_base::retrieve_bitstream(NV_ENC_OUTPUT_PTR bitstream, ::nvenc::nvenc_encoded_frame &frame) {
+  bool nvenc_base::reap_one(std::vector<::nvenc::nvenc_encoded_frame> &out_frames) {
+    auto &slot = slots[reap_pos];
+
     NV_ENC_LOCK_BITSTREAM lock_bitstream = {.version = NV_ENC_LOCK_BITSTREAM_VER};
-    lock_bitstream.outputBitstream = bitstream;
-    // Blocking lock: with doNotWait the driver hands out the buffer pointer before the picture is
-    // encoded, producing a zero sized frame. Only pictures the driver reported as finished are
-    // passed here, so the blocking call returns immediately.
+    lock_bitstream.outputBitstream = bitstreams[reap_pos];
+    // Blocking lock: doNotWait hands out the buffer before the picture is encoded, which yields a
+    // zero sized frame. The driver is known to have finished the oldest picture here, so the call
+    // returns immediately in practice and waits otherwise.
     lock_bitstream.doNotWait = 0;
 
     if (nvenc_failed(nvenc->nvEncLockBitstream(encoder, &lock_bitstream))) {
@@ -876,88 +867,49 @@ namespace NVENC_NAMESPACE {
       return false;
     }
 
+    ::nvenc::nvenc_encoded_frame encoded_frame;
     auto data_pointer = (uint8_t *) lock_bitstream.bitstreamBufferPtr;
-    frame.data = {data_pointer, data_pointer + lock_bitstream.bitstreamSizeInBytes};
-    frame.frame_index = lock_bitstream.outputTimeStamp;
-    frame.idr = lock_bitstream.pictureType == NV_ENC_PIC_TYPE_IDR;
-    frame.after_ref_frame_invalidation = encoder_state.rfi_needs_confirmation;
+    encoded_frame.data = {data_pointer, data_pointer + lock_bitstream.bitstreamSizeInBytes};
+    encoded_frame.frame_index = lock_bitstream.outputTimeStamp;
+    encoded_frame.idr = lock_bitstream.pictureType == NV_ENC_PIC_TYPE_IDR;
+    encoded_frame.after_ref_frame_invalidation = encoder_state.rfi_needs_confirmation;
+    encoder_state.rfi_needs_confirmation = false;
 
-    if (encoder_state.rfi_needs_confirmation) {
-      // Invalidation request has been fulfilled, and video network packet will be marked as such
-      encoder_state.rfi_needs_confirmation = false;
+    if (encoded_frame.frame_index != slot.frame_index) {
+      BOOST_LOG(warning) << "NvEnc: frame index mismatch " << slot.frame_index << " " << encoded_frame.frame_index;
     }
 
-    if (frame.idr) {
-      BOOST_LOG(debug) << "NvEnc: idr frame " << frame.frame_index;
+    encoder_state.last_encoded_frame_index = encoded_frame.frame_index;
+    encoder_state.completed_frame_count++;
+    encoder_state.frame_size_logger.collect_and_log(encoded_frame.data.size() / 1000.);
+
+    if (encoded_frame.idr) {
+      BOOST_LOG(debug) << "NvEnc: idr frame " << encoded_frame.frame_index;
     }
 
     if (nvenc_failed(nvenc->nvEncUnlockBitstream(encoder, lock_bitstream.outputBitstream))) {
       BOOST_LOG(error) << "NvEnc: NvEncUnlockBitstream() failed: " << last_nvenc_error_string;
     }
 
-    encoder_state.frame_size_logger.collect_and_log(frame.data.size() / 1000.);
+    if (slot.mapped && nvenc_failed(nvenc->nvEncUnmapInputResource(encoder, slot.mapped))) {
+      BOOST_LOG(error) << "NvEnc: NvEncUnmapInputResource() failed: " << last_nvenc_error_string;
+    }
+    slot.mapped = nullptr;
+
+    reap_pos = next_slot(reap_pos);
+    out_frames.push_back(std::move(encoded_frame));
     return true;
   }
 
-  bool nvenc_base::reap_output_frames(std::size_t ready_count, std::vector<::nvenc::nvenc_encoded_frame> &out_frames, bool wait_for_completion_event) {
-    ready_count = std::min(ready_count, pending_output_bitstreams.size());
-    if (ready_count == 0) {
-      return true;
-    }
-
-    // The completion event is auto-reset and shared by every in-flight picture, so a burst of
-    // finished frames collapses into a single signal. It is only used to detect a stalled driver,
-    // the lock on each finished picture does the actual waiting.
-    if (wait_for_completion_event && async_event_handle && !wait_for_async_event(encode_wait_timeout_ms)) {
-      BOOST_LOG(error) << "NvEnc: encode wait timeout";
-      return false;
-    }
-
-    for (std::size_t i = 0; i < ready_count; i++) {
-      auto bitstream = pending_output_bitstreams.front();
-      auto submitted = submitted_frames.front();
-
-      ::nvenc::nvenc_encoded_frame encoded_frame;
-      if (!retrieve_bitstream(bitstream, encoded_frame)) {
-        return false;
-      }
-
-      if (submitted.mapped_input_buffer) {
-        if (nvenc_failed(nvenc->nvEncUnmapInputResource(encoder, submitted.mapped_input_buffer))) {
-          BOOST_LOG(error) << "NvEnc: NvEncUnmapInputResource() failed: " << last_nvenc_error_string;
-        }
-      }
-
-      if (encoded_frame.frame_index != submitted.frame_index) {
-        BOOST_LOG(warning) << "NvEnc: frame index mismatch " << submitted.frame_index << " " << encoded_frame.frame_index;
-      }
-
-      encoder_state.last_encoded_frame_index = encoded_frame.frame_index;
-      encoder_state.completed_frame_count++;
-
-      pending_output_bitstreams.pop_front();
-      submitted_frames.pop_front();
-      // The driver finished this picture, so its input surface is free again
-      in_flight_input_surfaces.pop_front();
-      free_output_bitstreams.push_back(bitstream);
-
-      out_frames.push_back(std::move(encoded_frame));
-    }
-
-    return true;
-  }
-
-  bool nvenc_base::encode_frame(uint64_t frame_index, bool force_idr, std::vector<::nvenc::nvenc_encoded_frame> &out_frames) {
+  bool nvenc_base::encode_frame(uint64_t frame_index, bool force_idr, bool repeat_last_frame, std::vector<::nvenc::nvenc_encoded_frame> &out_frames) {
     if (!encoder) {
       return false;
     }
 
-    assert(current_input_surface < registered_input_buffers.size());
-    assert(!free_output_bitstreams.empty());
-
-    if (!input_surface_filled && std::ranges::find(in_flight_input_surfaces, current_input_surface) != in_flight_input_surfaces.end()) {
-      // The pipeline is repeating the last frame while the driver still reads its surface,
-      // so the content must be duplicated into a fresh surface before it can be submitted again.
+    // When capture repeats the last frame, the slot holding it is still owned by the driver, so the
+    // content has to be duplicated into a free slot. With no picture in flight the slot already
+    // holds the frame and can be submitted again as-is.
+    if (repeat_last_frame && pending_count() > 0) {
       const auto previous_surface = current_input_surface;
       if (!acquire_input_surface()) {
         return false;
@@ -968,20 +920,21 @@ namespace NVENC_NAMESPACE {
       }
     }
 
+    auto &slot = slots[current_input_surface];
+
     if (!synchronize_input_buffer()) {
       BOOST_LOG(error) << "NvEnc: failed to synchronize input buffer";
       return false;
     }
 
     NV_ENC_MAP_INPUT_RESOURCE mapped_input_buffer = {.version = NV_ENC_MAP_INPUT_RESOURCE_VER};
-    mapped_input_buffer.registeredResource = registered_input_buffers[current_input_surface];
+    mapped_input_buffer.registeredResource = slot.registered;
 
     if (nvenc_failed(nvenc->nvEncMapInputResource(encoder, &mapped_input_buffer))) {
       BOOST_LOG(error) << "NvEnc: NvEncMapInputResource() failed: " << last_nvenc_error_string;
       return false;
     }
-
-    auto output_bitstream = free_output_bitstreams.front();
+    slot.mapped = mapped_input_buffer.mappedResource;
 
     NV_ENC_PIC_PARAMS pic_params = {.version = NV_ENC_PIC_PARAMS_VER};
     pic_params.inputWidth = encoder_params.width;
@@ -991,8 +944,7 @@ namespace NVENC_NAMESPACE {
     pic_params.pictureStruct = NV_ENC_PIC_STRUCT_FRAME;
     pic_params.inputBuffer = mapped_input_buffer.mappedResource;
     pic_params.bufferFmt = mapped_input_buffer.mappedBufferFmt;
-    pic_params.outputBitstream = output_bitstream;
-    pic_params.completionEvent = async_event_handle;
+    pic_params.outputBitstream = bitstreams[current_input_surface];
 
     const auto status = nvenc->nvEncEncodePicture(encoder, &pic_params);
     if (status != NV_ENC_SUCCESS && status != NV_ENC_ERR_NEED_MORE_INPUT) {
@@ -1001,39 +953,33 @@ namespace NVENC_NAMESPACE {
       if (nvenc_failed(nvenc->nvEncUnmapInputResource(encoder, mapped_input_buffer.mappedResource))) {
         BOOST_LOG(error) << "NvEnc: NvEncUnmapInputResource() failed: " << last_nvenc_error_string;
       }
+      slot.mapped = nullptr;
       return false;
     }
 
-    free_output_bitstreams.pop_front();
-    pending_output_bitstreams.push_back(output_bitstream);
-    // The input resource stays mapped until the driver finishes this picture, because the rate
-    // control lookahead keeps reading it while the following frames are collected.
-    submitted_frames.push_back({frame_index, force_idr, mapped_input_buffer.mappedResource});
-    in_flight_input_surfaces.push_back(current_input_surface);
-    next_input_surface = (current_input_surface + 1) % input_surface_count;
-    input_surface_filled = false;
+    slot.frame_index = frame_index;
+    submit_pos = next_slot(current_input_surface);
 
     if (status == NV_ENC_ERR_NEED_MORE_INPUT) {
-      // The frame is buffered by the driver while the lookahead window fills up
+      // The picture is buffered by the driver while the lookahead window fills up.
       return true;
     }
 
-    // Without B-frames the driver encodes pictures strictly in submission order, so a successful
-    // submission means the oldest buffered picture finished and its bitstream became readable.
-    return reap_output_frames(1, out_frames);
+    // Synchronous mode finishes exactly one picture per successful call, and without B-frames the
+    // pictures leave the driver in submission order, so the oldest slot is the one that completed.
+    return reap_one(out_frames);
   }
 
   bool nvenc_base::flush(std::vector<::nvenc::nvenc_encoded_frame> &out_frames) {
-    // Every outstanding picture owns a pending bitstream, so an empty queue means the driver
-    // already delivered everything and must not receive another end of stream marker.
-    if (!encoder || pending_output_bitstreams.empty()) {
+    // Every outstanding picture owns a slot, so an empty ring means the driver already delivered
+    // everything and must not receive another end of stream marker.
+    if (!encoder || pending_count() == 0) {
       return true;
     }
 
     NV_ENC_PIC_PARAMS pic_params = {.version = NV_ENC_PIC_PARAMS_VER};
     pic_params.encodePicFlags = NV_ENC_PIC_FLAG_EOS;
     pic_params.pictureStruct = NV_ENC_PIC_STRUCT_FRAME;
-    pic_params.completionEvent = async_event_handle;
 
     const auto status = nvenc->nvEncEncodePicture(encoder, &pic_params);
     if (status != NV_ENC_SUCCESS && status != NV_ENC_ERR_NEED_MORE_INPUT) {
@@ -1044,8 +990,14 @@ namespace NVENC_NAMESPACE {
     }
 
     // The end of stream marker makes the driver encode everything the lookahead still buffered,
-    // so every pending bitstream is readable and the blocking locks complete immediately.
-    return reap_output_frames(pending_output_bitstreams.size(), out_frames, false);
+    // so every remaining bitstream is readable and the blocking locks complete immediately.
+    while (pending_count() > 0) {
+      if (!reap_one(out_frames)) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   bool nvenc_base::invalidate_ref_frames(uint64_t first_frame, uint64_t last_frame) {
@@ -1057,8 +1009,6 @@ namespace NVENC_NAMESPACE {
       BOOST_LOG(debug) << "NvEnc: rfi request " << first_frame << "-" << last_frame << " already done";
       return true;
     }
-
-    encoder_state.rfi_needs_confirmation = true;
 
     if (last_frame < first_frame) {
       BOOST_LOG(error) << "NvEnc: invaid rfi request " << first_frame << "-" << last_frame << ", generating IDR";
@@ -1073,8 +1023,6 @@ namespace NVENC_NAMESPACE {
     BOOST_LOG(debug) << "NvEnc: rfi request " << first_frame << "-" << last_frame << " expanding to last encoded frame " << encoder_state.last_encoded_frame_index;
     last_frame = encoder_state.last_encoded_frame_index;
 
-    encoder_state.last_rfi_range = {first_frame, last_frame};
-
     if (last_frame - first_frame + 1 >= encoder_params.ref_frames_in_dpb) {
       BOOST_LOG(debug) << "NvEnc: rfi request too large, generating IDR";
       return false;
@@ -1087,7 +1035,16 @@ namespace NVENC_NAMESPACE {
       }
     }
 
+    // Record the range and mark the request only once it was applied, otherwise the next frame would
+    // be announced to the client as a recovery point without repairing the damaged references.
+    encoder_state.last_rfi_range = {first_frame, last_frame};
+    encoder_state.rfi_needs_confirmation = true;
+
     return true;
+  }
+
+  int nvenc_base::lookahead_depth() const {
+    return encoder_params.lookahead_depth;
   }
 
   bool nvenc_base::nvenc_failed(NVENCSTATUS status) {

@@ -145,10 +145,10 @@ namespace NVENC_NAMESPACE {
       }
 
       if (cuda_surfaces.empty()) {
-        cuda_surfaces.resize(input_surface_count);
-        cuda_surface_pitches.resize(input_surface_count);
+        cuda_surfaces.resize(slots.size());
+        cuda_surface_pitches.resize(slots.size());
 
-        for (std::size_t i = 0; i < input_surface_count; i++) {
+        for (std::size_t i = 0; i < slots.size(); i++) {
           if (cuda_failed(cuda_functions.cuMemAllocPitch(&cuda_surfaces[i], &cuda_surface_pitches[i],
                                                          // Planar 16-bit YUV
                                                          encoder_params.width * 2,
@@ -161,24 +161,22 @@ namespace NVENC_NAMESPACE {
       }
     }
 
-    if (registered_input_buffers.empty()) {
-      for (std::size_t i = 0; i < cuda_surfaces.size(); i++) {
-        NV_ENC_REGISTER_RESOURCE register_resource = {.version = NV_ENC_REGISTER_RESOURCE_VER};
-        register_resource.resourceType = NV_ENC_INPUT_RESOURCE_TYPE_CUDADEVICEPTR;
-        register_resource.width = encoder_params.width;
-        register_resource.height = encoder_params.height;
-        register_resource.pitch = cuda_surface_pitches[i];
-        register_resource.resourceToRegister = (void *) cuda_surfaces[i];
-        register_resource.bufferFormat = encoder_params.buffer_format;
-        register_resource.bufferUsage = NV_ENC_INPUT_IMAGE;
+    for (std::size_t i = 0; i < cuda_surfaces.size(); i++) {
+      NV_ENC_REGISTER_RESOURCE register_resource = {.version = NV_ENC_REGISTER_RESOURCE_VER};
+      register_resource.resourceType = NV_ENC_INPUT_RESOURCE_TYPE_CUDADEVICEPTR;
+      register_resource.width = encoder_params.width;
+      register_resource.height = encoder_params.height;
+      register_resource.pitch = cuda_surface_pitches[i];
+      register_resource.resourceToRegister = (void *) cuda_surfaces[i];
+      register_resource.bufferFormat = encoder_params.buffer_format;
+      register_resource.bufferUsage = NV_ENC_INPUT_IMAGE;
 
-        if (nvenc_failed(nvenc->nvEncRegisterResource(encoder, &register_resource))) {
-          BOOST_LOG(error) << "NvEnc: NvEncRegisterResource() failed: " << last_nvenc_error_string;
-          return false;
-        }
-
-        registered_input_buffers.push_back(register_resource.registeredResource);
+      if (nvenc_failed(nvenc->nvEncRegisterResource(encoder, &register_resource))) {
+        BOOST_LOG(error) << "NvEnc: NvEncRegisterResource() failed: " << last_nvenc_error_string;
+        return false;
       }
+
+      slots[i].registered = register_resource.registeredResource;
     }
 
     return true;

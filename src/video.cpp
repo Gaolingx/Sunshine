@@ -601,21 +601,36 @@ namespace video {
     }
 
     /**
+     * @brief Get the rate control lookahead depth the driver was initialized with.
+     *
+     * @return Effective lookahead depth, zero when lookahead is disabled or unsupported.
+     */
+    int lookahead_depth() const override {
+      if (!device || !device->nvenc) {
+        return 0;
+      }
+
+      return device->nvenc->lookahead_depth();
+    }
+
+    /**
      * @brief Submit the next frame to NVENC and collect the frames that became available.
      *
      * @param frame_index Monotonic frame index assigned by the video pipeline.
      * @param frame_timestamp Capture timestamp associated with the submitted frame.
+     * @param repeat_last_frame Submit the previously converted picture again instead of new content.
      * @param out_frames Appended with every frame that NVENC finished during this submission.
      * @return `true` on success, `false` on encoding failure.
      */
-    bool encode_frame(uint64_t frame_index, std::optional<std::chrono::steady_clock::time_point> frame_timestamp, std::vector<nvenc::nvenc_encoded_frame> &out_frames) {
+    bool encode_frame(uint64_t frame_index, std::optional<std::chrono::steady_clock::time_point> frame_timestamp, bool repeat_last_frame, std::vector<nvenc::nvenc_encoded_frame> &out_frames) {
       if (!device || !device->nvenc) {
         return false;
       }
 
       pending_timestamps.push_back(frame_timestamp);
 
-      if (!device->nvenc->encode_frame(frame_index, force_idr, out_frames)) {
+      if (!device->nvenc->encode_frame(frame_index, force_idr, repeat_last_frame, out_frames)) {
+        pending_timestamps.pop_back();
         return false;
       }
 
@@ -1983,14 +1998,15 @@ namespace video {
    * @param packets Output queue that receives the encoded packet.
    * @param channel_data Platform or protocol state attached to the packet.
    * @param frame_timestamp Capture timestamp associated with the encoded frame.
+   * @param repeat_last_frame Submit the previously converted picture again instead of new content.
    * @return 0 when packets are queued; nonzero when NVENC encoding fails.
    */
-  int encode_nvenc(int64_t frame_nr, nvenc_encode_session_t &session, safe::mail_raw_t::queue_t<packet_t> &packets, void *channel_data, std::optional<std::chrono::steady_clock::time_point> frame_timestamp) {
+  int encode_nvenc(int64_t frame_nr, nvenc_encode_session_t &session, safe::mail_raw_t::queue_t<packet_t> &packets, void *channel_data, std::optional<std::chrono::steady_clock::time_point> frame_timestamp, bool repeat_last_frame) {
     std::vector<nvenc::nvenc_encoded_frame> encoded_frames;
 
     // Rate control lookahead makes NVENC buffer frames internally, so a submission does not always
-    // produce a packet and a single call can finish several frames that were submitted earlier.
-    if (!session.encode_frame(frame_nr, frame_timestamp, encoded_frames)) {
+    // produce a packet. A submission either finishes nothing or exactly one earlier picture.
+    if (!session.encode_frame(frame_nr, frame_timestamp, repeat_last_frame, encoded_frames)) {
       BOOST_LOG(error) << "NvEnc failed to encode a frame";
       return -1;
     }
@@ -2031,13 +2047,14 @@ namespace video {
    * @param packets Packets queued or emitted by the stream.
    * @param channel_data Channel data.
    * @param frame_timestamp Frame timestamp.
+   * @param repeat_last_frame Submit the previously converted picture again instead of new content.
    * @return 0 when the frame is encoded and queued; nonzero on encoder failure.
    */
-  int encode(int64_t frame_nr, encode_session_t &session, safe::mail_raw_t::queue_t<packet_t> &packets, void *channel_data, std::optional<std::chrono::steady_clock::time_point> frame_timestamp) {
+  int encode(int64_t frame_nr, encode_session_t &session, safe::mail_raw_t::queue_t<packet_t> &packets, void *channel_data, std::optional<std::chrono::steady_clock::time_point> frame_timestamp, bool repeat_last_frame) {
     if (auto avcodec_session = dynamic_cast<avcodec_encode_session_t *>(&session)) {
       return encode_avcodec(frame_nr, *avcodec_session, packets, channel_data, frame_timestamp);
     } else if (auto nvenc_session = dynamic_cast<nvenc_encode_session_t *>(&session)) {
-      return encode_nvenc(frame_nr, *nvenc_session, packets, channel_data, frame_timestamp);
+      return encode_nvenc(frame_nr, *nvenc_session, packets, channel_data, frame_timestamp, repeat_last_frame);
     }
 
     return -1;
@@ -2537,6 +2554,15 @@ namespace video {
 
     // set max frame time based on client-requested target framerate.
     double minimum_fps_target = (config::video.minimum_fps_target > 0.0) ? config::video.minimum_fps_target : (config.framerate / 2);
+
+    // Rate control lookahead keeps `depth` pictures inside the driver and releases the oldest one only
+    // when another picture is submitted, so the duplicate frames produced by the timeout below are the
+    // submission clock of the encoder. An idle screen would otherwise turn every capture interval
+    // directly into end-to-end latency, which is what this feature costs.
+    if (session->lookahead_depth() > 0 && config.framerate > 0) {
+      minimum_fps_target = config.framerate;
+    }
+
     std::chrono::duration<double, std::milli> max_frametime {1000.0 / minimum_fps_target};
     BOOST_LOG(info) << "Minimum FPS target set to ~"sv << minimum_fps_target << "fps ("sv << max_frametime.count() << "ms)"sv;
 
@@ -2575,10 +2601,12 @@ namespace video {
       }
 
       std::optional<std::chrono::steady_clock::time_point> frame_timestamp;
+      bool captured_frame = false;
 
       // Encode at a minimum FPS to avoid image quality issues with static content
       if (!requested_idr_frame || images->peek()) {
         if (auto img = images->pop(max_frametime)) {
+          captured_frame = true;
           frame_timestamp = img->frame_timestamp;
           if (session->convert(*img)) {
             BOOST_LOG(error) << "Could not convert image"sv;
@@ -2603,7 +2631,7 @@ namespace video {
         break;
       }
 
-      if (encode(frame_nr++, *session, packets, channel_data, frame_timestamp)) {
+      if (encode(frame_nr++, *session, packets, channel_data, frame_timestamp, !captured_frame)) {
         BOOST_LOG(error) << "Could not encode video packet"sv;
         return;
       }
@@ -2908,7 +2936,7 @@ namespace video {
             frame_timestamp = img->frame_timestamp;
           }
 
-          if (encode(ctx->frame_nr++, *pos->session, ctx->packets, ctx->channel_data, frame_timestamp)) {
+          if (encode(ctx->frame_nr++, *pos->session, ctx->packets, ctx->channel_data, frame_timestamp, !frame_captured)) {
             BOOST_LOG(error) << "Could not encode video packet"sv;
             ctx->shutdown_event->raise(true);
 
@@ -3150,9 +3178,10 @@ namespace video {
 
     // Rate control lookahead buffers several frames before the encoder emits the first packet, so the
     // probe has to keep feeding frames instead of repeating a single submission until one appears.
-    const auto max_probe_frames = std::max(config::video.nv.lookahead_depth, 0) + 8;
+    // The encoder sizes its input ring for exactly this many submissions.
+    const auto max_probe_frames = static_cast<int>(nvenc::input_surface_count(session->lookahead_depth()));
     for (int probe_frame = 1; probe_frame <= max_probe_frames && !packets->peek(); ++probe_frame) {
-      if (encode(probe_frame, *session, packets, nullptr, {})) {
+      if (encode(probe_frame, *session, packets, nullptr, {}, probe_frame > 1)) {
         return -1;
       }
     }

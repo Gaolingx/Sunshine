@@ -149,19 +149,23 @@ namespace nvenc {
   }
 
   /**
-   * @brief Compute how many NVENC input surfaces the configuration requires to run.
+   * @brief Compute how many NVENC input surfaces one lookahead depth requires to run.
    *
-   * @param config NVENC encoder configuration.
+   * The driver returns `NV_ENC_ERR_NEED_MORE_INPUT` for the first `lookahead_depth`
+   * submissions and finishes one further picture per submission afterwards, so it holds exactly
+   * `lookahead_depth` pictures in steady state. One more surface is required for the frame that
+   * is being converted, and one spare keeps `acquire_input_surface()` from ever running into a
+   * full ring.
+   *
+   * @param lookahead_depth Effective lookahead depth the driver was initialized with.
    * @return Number of input surfaces that must stay allocated and registered.
    */
-  inline std::size_t input_surface_count(const nvenc_config &config) {
-    if (config.lookahead_depth <= 0) {
+  inline std::size_t input_surface_count(int lookahead_depth) {
+    if (lookahead_depth <= 0) {
       return 1;
     }
 
-    // The driver holds every frame of the lookahead window plus the one currently being encoded,
-    // and both the surface being converted and the one being submitted must stay reserved.
-    return static_cast<std::size_t>(config.lookahead_depth) + 6;
+    return static_cast<std::size_t>(lookahead_depth) + 2;
   }
 
 }  // namespace nvenc

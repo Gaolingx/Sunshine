@@ -1475,6 +1475,9 @@ supported on the current platform.
         <td>Description</td>
         <td colspan="2">
             Sunshine tries to save bandwidth when content on screen is static or a low framerate. Because many clients expect a constant stream of video frames, a certain amount of duplicate frames are sent when this happens. This setting controls the lowest effective framerate a stream can reach.
+            @note{This setting is ignored while [nvenc_lookahead_depth](#nvenc_lookahead_depth) is non-zero, because the
+            NVENC rate control lookahead only releases a buffered frame after further frames were submitted. Duplicate
+            frames are sent at the stream framerate in that case.}
         </td>
     </tr>
     <tr>
@@ -2481,12 +2484,19 @@ supported on the current platform.
             Number of frames the NVENC rate controller may analyze before it starts encoding them.
             A deeper lookahead lets the encoder spend bits where they are actually needed across multiple frames,
             which raises compression efficiency while the requested bitrate mode stays constant bitrate and no
-            B-frames are used. The tradeoff is additional end to end latency of roughly the configured number of
-            frames plus a few frames of encoder pipelining, and additional VRAM for the frame buffers.
+            B-frames are used. The tradeoff is additional end to end latency and additional VRAM for the frame buffers.
             @note{This option only applies when using NVENC [encoder](#encoder).}
             @note{Values above 16 are clamped to 16.}
-            @note{A deeper lookahead reduces the number of frames that can be repaired after packet loss,
-            because the frames it buffers are already encoded before a reference frame invalidation request arrives.}
+            @note{The encoder only releases a picture once that many further pictures have been submitted, so the
+            added latency is the lookahead depth multiplied by the interval between submissions. Sunshine keeps
+            submitting the last captured frame at the stream frame rate, which turns that interval into one frame
+            interval. The encoder therefore no longer idles down to [minimum_fps_target](#minimum_fps_target) while
+            this option is enabled.}
+            @note{Each frame of depth needs one registered input surface, so the encoder allocates
+            `nvenc_lookahead_depth + 2` surfaces.}
+            @note{Reference frame invalidation is disabled while the lookahead is active, because the frames inside
+            the window are already encoded when a packet loss is reported. Lost frames are recovered with a full IDR
+            frame instead of a partial repair.}
             @warning{Increases encoding latency.}
         </td>
     </tr>

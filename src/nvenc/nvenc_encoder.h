@@ -58,15 +58,17 @@ namespace nvenc {
      * @brief Encode the next frame using the platform-specific input surface.
      *
      * When rate control lookahead is enabled the encoder buffers input frames internally, so a
-     * submission does not necessarily produce an output immediately, and a single call can make
-     * several previously submitted frames available at once.
+     * submission does not necessarily produce an output immediately. At most one frame becomes
+     * available per call.
      *
      * @param frame_index Frame index that uniquely identifies the frame.
      * @param force_idr Whether to encode the frame as a forced IDR.
+     * @param repeat_last_frame Whether the input surface still holds the previously submitted frame
+     *        and must be duplicated into a fresh surface before being submitted again.
      * @param out_frames List that receives every frame that became available during this call.
      * @return `true` on success, `false` on error.
      */
-    virtual bool encode_frame(std::uint64_t frame_index, bool force_idr, std::vector<nvenc_encoded_frame> &out_frames) = 0;
+    virtual bool encode_frame(std::uint64_t frame_index, bool force_idr, bool repeat_last_frame, std::vector<nvenc_encoded_frame> &out_frames) = 0;
 
     /**
      * @brief Signal the end of the input stream and collect every frame still buffered internally.
@@ -84,6 +86,15 @@ namespace nvenc {
      * @return `true` on success, `false` on error.
      */
     virtual bool invalidate_ref_frames(std::uint64_t first_frame, std::uint64_t last_frame) = 0;
+
+    /**
+     * @brief Get the rate control lookahead depth the driver was initialized with.
+     *
+     * The value is the effective depth, so it is zero when lookahead is disabled or unsupported.
+     *
+     * @return Number of pictures the driver buffers before it emits one.
+     */
+    virtual int lookahead_depth() const = 0;
   };
 
 }  // namespace nvenc
