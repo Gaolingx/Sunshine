@@ -287,16 +287,6 @@ namespace NVENC_NAMESPACE {
     enc_config.rcParams.averageBitRate = client_config.bitrate * 1000;
     if (get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE)) {
       const auto buffer_size = ::nvenc::vbv_buffer_size_bits(config, client_config.framerate, client_config.bitrate);
-
-      if (config.vbv_milliseconds > 0) {
-        const auto requested_buffer_size = static_cast<std::uint64_t>(client_config.bitrate) * static_cast<std::uint64_t>(config.vbv_milliseconds);
-        if (requested_buffer_size > buffer_size) {
-          BOOST_LOG(warning) << "NvEnc: requested VBV of "sv << config.vbv_milliseconds << " ms is clamped to "sv
-                             << (buffer_size / 1000) << " kbit, because the client cannot receive larger "
-                             << "single-frame bursts"sv;
-        }
-      }
-
       enc_config.rcParams.vbvBufferSize = static_cast<uint32_t>(std::min<std::uint64_t>(buffer_size, UINT32_MAX));
     }
 

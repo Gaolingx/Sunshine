@@ -22,14 +22,6 @@ namespace nvenc {
   constexpr int max_lookahead_level = 3;
 
   /**
-   * @brief Maximum target buffer size used when deriving a millisecond based VBV/HRD.
-   *
-   * The video protocol can only carry a limited amount of data for a single encoded frame,
-   * so an oversized VBV window would allow frame sizes the client cannot receive.
-   */
-  constexpr std::uint64_t max_vbv_buffer_size_bits = 8ULL * 1024 * 1024;
-
-  /**
    * @brief Enumerates supported nVENC two pass options.
    */
   enum class nvenc_two_pass {
@@ -121,7 +113,7 @@ namespace nvenc {
    * @param config NVENC encoder configuration.
    * @param framerate Encoded frames per second.
    * @param bitrate_kbps Target bitrate in kilobits per second.
-   * @return Buffer size in bits, never smaller than a single frame of target bitrate.
+   * @return Buffer size in bits, a single frame of target bitrate when no larger window is requested.
    */
   inline std::uint64_t vbv_buffer_size_bits(const nvenc_config &config, int framerate, int bitrate_kbps) {
     if (framerate <= 0 || bitrate_kbps <= 0) {
@@ -129,23 +121,16 @@ namespace nvenc {
     }
 
     const auto bitrate = static_cast<std::uint64_t>(bitrate_kbps);
-    const auto total_bitrate = bitrate * 1000;
-    const auto single_frame_size = total_bitrate / static_cast<std::uint64_t>(framerate);
+    const auto single_frame_size = bitrate * 1000 / static_cast<std::uint64_t>(framerate);
 
-    std::uint64_t buffer_size = single_frame_size;
     if (config.vbv_milliseconds > 0) {
       const auto requested = bitrate * static_cast<std::uint64_t>(config.vbv_milliseconds);
-      if (requested > buffer_size) {
-        buffer_size = requested;
+      if (requested > single_frame_size) {
+        return requested;
       }
     }
 
-    // The cap has to be applied after the requested window is computed, otherwise a large
-    // millisecond value could produce a buffer the video protocol is unable to deliver.
-    buffer_size = std::min(buffer_size, max_vbv_buffer_size_bits);
-
-    // A buffer smaller than one frame would starve the rate controller, so the frame size wins.
-    return std::max(buffer_size, single_frame_size);
+    return single_frame_size;
   }
 
   /**

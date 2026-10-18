@@ -2450,7 +2450,6 @@ supported on the current platform.
             requested bitrate and constant bitrate mode unchanged, which typically improves quality on scenes with
             motion, at the cost of a burst that the network must be able to absorb.
             @note{This option only applies when using NVENC [encoder](#encoder).}
-            @note{The buffer is capped at 8 Mbit because the streaming protocol cannot deliver larger single frames.}
             @warning{Can lead to network packet loss.}
         </td>
     </tr>

@@ -31,19 +31,27 @@ TEST(NvencConfigTest, NeverShrinksVbvBelowASingleFrame) {
   EXPECT_EQ(single_frame, nvenc::vbv_buffer_size_bits(config, 30, 10000));
 }
 
-TEST(NvencConfigTest, KeepsTheSingleFrameSizeWhenItExceedsTheProtocolLimit) {
+TEST(NvencConfigTest, KeepsTheSingleFrameSizeWhenNoWindowIsRequested) {
   nvenc::nvenc_config config;
 
-  // 300000 kbps at 30 fps is a 10 Mbit frame, which is already above the transport limit.
+  // 300000 kbps at 30 fps is a 10 Mbit frame.
   EXPECT_EQ(10000000u, nvenc::vbv_buffer_size_bits(config, 30, 300000));
 }
 
-TEST(NvencConfigTest, ClampsVbvToTheFrameSizeTheProtocolCanCarry) {
+TEST(NvencConfigTest, ExtendsVbvToTheRequestedWindow) {
   nvenc::nvenc_config config;
   config.vbv_milliseconds = 1000;
 
-  // 30000 kbps for a full second is 30000000 bits, far above the transport limit.
-  EXPECT_EQ(nvenc::max_vbv_buffer_size_bits, nvenc::vbv_buffer_size_bits(config, 60, 30000));
+  // 30000 kbps for a full second is 30000000 bits.
+  EXPECT_EQ(30000000u, nvenc::vbv_buffer_size_bits(config, 60, 30000));
+}
+
+TEST(NvencConfigTest, ExtendsVbvBeyondASingleLargeFrame) {
+  nvenc::nvenc_config config;
+  config.vbv_milliseconds = 500;
+
+  // 300000 kbps at 30 fps is a 10 Mbit frame, half a second is 150000000 bits.
+  EXPECT_EQ(150000000u, nvenc::vbv_buffer_size_bits(config, 30, 300000));
 }
 
 TEST(NvencConfigTest, ReportsNoBufferForDegenerateBitrateOrFramerate) {
