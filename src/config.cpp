@@ -1645,7 +1645,6 @@ namespace config {
                                                                                                  NV_ENC_MULTI_PASS_DISABLED;
     video.nv_legacy.h264_coder = video.nv.h264_cavlc ? NV_ENC_H264_ENTROPY_CODING_MODE_CAVLC : NV_ENC_H264_ENTROPY_CODING_MODE_CABAC;
     video.nv_legacy.spatial_aq = video.nv.adaptive_quantization;
-    video.nv_legacy.vbv_ms = video.nv.vbv_milliseconds;
     video.nv_legacy.ldkfs = video.nv.low_delay_key_frame_scale;
     video.nv_legacy.aq_strength = video.nv.aq_strength;
     video.nv_legacy.nonref_p = video.nv.non_reference_p_frames;

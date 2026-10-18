@@ -207,18 +207,12 @@ TEST_F(NvencQualityOptionsTest, AppliesVbvSizeInMilliseconds) {
   config::apply_config_for_test("nvenc_vbv_ms = 500\n");
 
   EXPECT_EQ(500, config::video.nv.vbv_milliseconds);
-#if !defined(__ANDROID__) && !defined(__APPLE__)
-  EXPECT_EQ(500, config::video.nv_legacy.vbv_ms);
-#endif
 }
 
 TEST_F(NvencQualityOptionsTest, KeepsSingleFrameVbvWhenMillisecondsAreOutOfRange) {
   config::apply_config_for_test("nvenc_vbv_ms = 1001\n");
 
   EXPECT_EQ(0, config::video.nv.vbv_milliseconds);
-#if !defined(__ANDROID__) && !defined(__APPLE__)
-  EXPECT_EQ(0, config::video.nv_legacy.vbv_ms);
-#endif
 }
 
 TEST_F(NvencQualityOptionsTest, AppliesLookaheadDepth) {

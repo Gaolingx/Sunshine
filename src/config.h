@@ -87,7 +87,6 @@ namespace config {
       int multipass;  ///< Legacy NVENC multipass mode.
       int h264_coder;  ///< Legacy NVENC H.264 entropy-coding mode.
       int spatial_aq;  ///< FFmpeg NVENC spatial adaptive-quantization mode.
-      int vbv_ms;  ///< Legacy NVENC VBV buffer size in milliseconds of target bitrate.
       int ldkfs;  ///< FFmpeg NVENC low delay key frame scale, zero uses the encoder default.
       int aq_strength;  ///< FFmpeg NVENC adaptive-quantization strength, zero uses the encoder default.
       int nonref_p;  ///< FFmpeg NVENC non-reference P-frame insertion mode.

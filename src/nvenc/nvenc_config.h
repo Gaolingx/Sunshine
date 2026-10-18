@@ -108,6 +108,21 @@ namespace nvenc {
   };
 
   /**
+   * @brief Resolve the bitrate the encoder has to target.
+   *
+   * The client requests the bitrate, but the server may cap it with the `max_bitrate` option.
+   * Every rate control value has to use the same resolved bitrate, otherwise the target bitrate
+   * and the VBV/HRD window are derived from different rates.
+   *
+   * @param requested_kbps Bitrate requested by the client in kilobits per second.
+   * @param ceiling_kbps Configured bitrate ceiling in kilobits per second, zero disables the ceiling.
+   * @return Requested bitrate, or the ceiling when it is lower.
+   */
+  inline int effective_bitrate_kbps(int requested_kbps, int ceiling_kbps) {
+    return ceiling_kbps > 0 ? std::min(requested_kbps, ceiling_kbps) : requested_kbps;
+  }
+
+  /**
    * @brief Compute the VBV/HRD buffer size in bits requested by the configuration.
    *
    * @param config NVENC encoder configuration.

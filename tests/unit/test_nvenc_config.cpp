@@ -8,6 +8,27 @@
 // local includes
 #include <src/nvenc/nvenc_config.h>
 
+TEST(NvencConfigTest, KeepsRequestedBitrateWithoutCeiling) {
+  EXPECT_EQ(20000, nvenc::effective_bitrate_kbps(20000, 0));
+  EXPECT_EQ(20000, nvenc::effective_bitrate_kbps(20000, -1));
+}
+
+TEST(NvencConfigTest, AppliesBitrateCeiling) {
+  EXPECT_EQ(5000, nvenc::effective_bitrate_kbps(20000, 5000));
+}
+
+TEST(NvencConfigTest, IgnoresCeilingAboveRequestedBitrate) {
+  EXPECT_EQ(20000, nvenc::effective_bitrate_kbps(20000, 50000));
+}
+
+TEST(NvencConfigTest, ComputesVbvFromCappedBitrate) {
+  nvenc::nvenc_config config;
+  config.vbv_milliseconds = 500;
+
+  // 5000 kbps for half a second is 2500000 bits, well above the 83333 bit single frame.
+  EXPECT_EQ(2500000u, nvenc::vbv_buffer_size_bits(config, 60, nvenc::effective_bitrate_kbps(20000, 5000)));
+}
+
 TEST(NvencConfigTest, ComputesSingleFrameVbvByDefault) {
   nvenc::nvenc_config config;
 

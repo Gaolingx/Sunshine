@@ -284,9 +284,12 @@ namespace NVENC_NAMESPACE {
       enc_config.rcParams.aqStrength = std::min(config.aq_strength, 15);
     }
     enc_config.rcParams.enableNonRefP = config.non_reference_p_frames;
-    enc_config.rcParams.averageBitRate = client_config.bitrate * 1000;
+    // The target bitrate and the VBV window must be based on the same value, otherwise a configured
+    // max_bitrate ceiling would cap one of them but not the other.
+    const auto bitrate_kbps = ::nvenc::effective_bitrate_kbps(client_config.bitrate, config::video.max_bitrate);
+    enc_config.rcParams.averageBitRate = bitrate_kbps * 1000;
     if (get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE)) {
-      const auto buffer_size = ::nvenc::vbv_buffer_size_bits(config, client_config.framerate, client_config.bitrate);
+      const auto buffer_size = ::nvenc::vbv_buffer_size_bits(config, client_config.framerate, bitrate_kbps);
       enc_config.rcParams.vbvBufferSize = static_cast<uint32_t>(std::min<std::uint64_t>(buffer_size, UINT32_MAX));
     }
 
@@ -613,9 +616,10 @@ namespace NVENC_NAMESPACE {
       extra += " two-pass";
     }
     if (enc_config.rcParams.vbvBufferSize != 0) {
+      const auto bitrate_kbps = ::nvenc::effective_bitrate_kbps(client_config.bitrate, config::video.max_bitrate);
       extra += std::format(
         " vbv={}ms",
-        static_cast<int>(std::lround(enc_config.rcParams.vbvBufferSize * 1000.0 / (client_config.bitrate * 1000.0)))
+        static_cast<int>(std::lround(enc_config.rcParams.vbvBufferSize * 1000.0 / (bitrate_kbps * 1000.0)))
       );
     }
     if (enc_config.rcParams.enableLookahead) {
@@ -775,8 +779,9 @@ namespace NVENC_NAMESPACE {
     }
 
     auto frame_size_format = stat_trackers::two_digits_after_decimal();
+    const auto bitrate_kbps = ::nvenc::effective_bitrate_kbps(client_config.bitrate, config::video.max_bitrate);
     BOOST_LOG(debug) << "NvEnc: requested encoded frame size "
-                     << frame_size_format % (client_config.bitrate / 8. / client_config.framerate) << " kB";
+                     << frame_size_format % (bitrate_kbps / 8. / client_config.framerate) << " kB";
     log_created_encoder(init_params, enc_config, config, client_config, buffer_format);
 
     encoder_state = {};

@@ -2444,7 +2444,8 @@ supported on the current platform.
     <tr>
         <td>Description</td>
         <td colspan="2">
-            VBV/HRD buffer size expressed in milliseconds of the requested bitrate.
+            VBV/HRD buffer size expressed in milliseconds of the target bitrate, which is the bitrate requested by
+            the client capped by [max_bitrate](#max_bitrate).
             By default Sunshine uses a single-frame VBV/HRD, so the encoder has no room to spend extra bits on complex
             frames. Setting this to a positive value gives the rate controller a longer window while keeping the
             requested bitrate and constant bitrate mode unchanged, which typically improves quality on scenes with
