@@ -151,11 +151,8 @@ namespace nvenc {
   /**
    * @brief Compute how many NVENC input surfaces one lookahead depth requires to run.
    *
-   * The driver returns `NV_ENC_ERR_NEED_MORE_INPUT` for the first `lookahead_depth`
-   * submissions and finishes one further picture per submission afterwards, so it holds exactly
-   * `lookahead_depth` pictures in steady state. One more surface is required for the frame that
-   * is being converted, and one spare keeps `acquire_input_surface()` from ever running into a
-   * full ring.
+   * The driver holds `lookahead_depth` pictures in steady state, one more surface is being
+   * converted, and one spare keeps the ring from running full.
    *
    * @param lookahead_depth Effective lookahead depth the driver was initialized with.
    * @return Number of input surfaces that must stay allocated and registered.

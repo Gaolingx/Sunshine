@@ -2554,15 +2554,6 @@ namespace video {
 
     // set max frame time based on client-requested target framerate.
     double minimum_fps_target = (config::video.minimum_fps_target > 0.0) ? config::video.minimum_fps_target : (config.framerate / 2);
-
-    // Rate control lookahead keeps `depth` pictures inside the driver and releases the oldest one only
-    // when another picture is submitted, so the duplicate frames produced by the timeout below are the
-    // submission clock of the encoder. An idle screen would otherwise turn every capture interval
-    // directly into end-to-end latency, which is what this feature costs.
-    if (session->lookahead_depth() > 0 && config.framerate > 0) {
-      minimum_fps_target = config.framerate;
-    }
-
     std::chrono::duration<double, std::milli> max_frametime {1000.0 / minimum_fps_target};
     BOOST_LOG(info) << "Minimum FPS target set to ~"sv << minimum_fps_target << "fps ("sv << max_frametime.count() << "ms)"sv;
 
@@ -3176,10 +3167,10 @@ namespace video {
 
     auto packets = mail::man->queue<packet_t>(mail::video_packets);
 
-    // Rate control lookahead buffers several frames before the encoder emits the first packet, so the
-    // probe has to keep feeding frames instead of repeating a single submission until one appears.
-    // The encoder sizes its input ring for exactly this many submissions.
-    const auto max_probe_frames = static_cast<int>(nvenc::input_surface_count(session->lookahead_depth()));
+    // Encoders that buffer pictures emit the first packet only after several submissions. NVENC needs
+    // as many submissions as its input ring holds, the others report no depth and get a fixed slack.
+    constexpr int probe_frame_slack = 8;
+    const auto max_probe_frames = static_cast<int>(std::max(nvenc::input_surface_count(session->lookahead_depth()), static_cast<std::size_t>(probe_frame_slack)));
     for (int probe_frame = 1; probe_frame <= max_probe_frames && !packets->peek(); ++probe_frame) {
       if (encode(probe_frame, *session, packets, nullptr, {}, probe_frame > 1)) {
         return -1;

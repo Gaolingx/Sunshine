@@ -118,10 +118,6 @@ namespace NVENC_NAMESPACE {
     /**
      * @brief Pick the slot that the next captured frame is converted into and submitted from.
      *
-     * Derived classes call this before writing into their platform-specific surface storage.
-     * Slots are used as a ring buffer because the driver keeps lookahead frames alive until
-     * their bitstream has been retrieved.
-     *
      * @return `true` when a free slot was selected, `false` when the driver stopped producing output.
      */
     bool acquire_input_surface();
@@ -137,10 +133,6 @@ namespace NVENC_NAMESPACE {
 
     /**
      * @brief Required. Duplicate one input surface into another.
-     *
-     * The video pipeline repeats the last frame when capture delivers slower than the encoder runs,
-     * but the driver keeps reading the surface of the previous frame while the lookahead window
-     * is filled, so the content has to be copied into a fresh surface.
      *
      * @param from Index of the surface that holds the frame to duplicate.
      * @param to Index of the surface that receives the copy.
@@ -180,9 +172,8 @@ namespace NVENC_NAMESPACE {
     /**
      * @brief One input surface and its place in the submission ring.
      *
-     * A slot is owned by the driver from `nvEncEncodePicture()` until its bitstream has been
-     * retrieved. Ownership is therefore implied by the position between `reap_pos` and
-     * `submit_pos` and needs no separate bookkeeping.
+     * The driver owns a slot from `nvEncEncodePicture()` until its bitstream is retrieved, which
+     * is exactly the range between `reap_pos` and `submit_pos`.
      */
     struct input_slot_t {
       NV_ENC_REGISTERED_PTR registered = nullptr;  ///< Surface registered with `NvEncRegisterResource()`.

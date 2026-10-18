@@ -570,8 +570,7 @@ namespace NVENC_NAMESPACE {
       return false;
     }
 
-    // Bitstream buffers are paired with input slots by index, and the driver writes the picture of
-    // slot i into bitstream i. Slots are sized here so that the platform layer can fill them in.
+    // Bitstream buffers are paired with input slots by index; the platform layer fills the slots.
     const auto slot_count = ::nvenc::input_surface_count(encoder_params.lookahead_depth);
     slots.resize(slot_count);
     bitstreams.reserve(slot_count);
@@ -765,8 +764,7 @@ namespace NVENC_NAMESPACE {
     configure_codec(enc_config, config, client_config, colorspace, buffer_format, init_params.encodeGUID);
     init_params.encodeConfig = &enc_config;
 
-    // Frames inside the lookahead window are already encoded when an invalidation request arrives,
-    // so nvEncInvalidateRefFrames() could never repair them. Recovery has to use a forced IDR.
+    // Frames inside the lookahead window are already encoded, so invalidation cannot repair them.
     if (encoder_params.lookahead_depth > 0) {
       encoder_params.rfi = false;
     }
@@ -857,9 +855,7 @@ namespace NVENC_NAMESPACE {
 
     NV_ENC_LOCK_BITSTREAM lock_bitstream = {.version = NV_ENC_LOCK_BITSTREAM_VER};
     lock_bitstream.outputBitstream = bitstreams[reap_pos];
-    // Blocking lock: doNotWait hands out the buffer before the picture is encoded, which yields a
-    // zero sized frame. The driver is known to have finished the oldest picture here, so the call
-    // returns immediately in practice and waits otherwise.
+    // A non-blocking lock can return before the picture is encoded.
     lock_bitstream.doNotWait = 0;
 
     if (nvenc_failed(nvenc->nvEncLockBitstream(encoder, &lock_bitstream))) {
@@ -906,9 +902,7 @@ namespace NVENC_NAMESPACE {
       return false;
     }
 
-    // When capture repeats the last frame, the slot holding it is still owned by the driver, so the
-    // content has to be duplicated into a free slot. With no picture in flight the slot already
-    // holds the frame and can be submitted again as-is.
+    // The duplicated frame must not reuse a surface the driver still reads.
     if (repeat_last_frame && pending_count() > 0) {
       const auto previous_surface = current_input_surface;
       if (!acquire_input_surface()) {
@@ -965,14 +959,12 @@ namespace NVENC_NAMESPACE {
       return true;
     }
 
-    // Synchronous mode finishes exactly one picture per successful call, and without B-frames the
-    // pictures leave the driver in submission order, so the oldest slot is the one that completed.
+    // Without B-frames the oldest submitted picture is the one that finished.
     return reap_one(out_frames);
   }
 
   bool nvenc_base::flush(std::vector<::nvenc::nvenc_encoded_frame> &out_frames) {
-    // Every outstanding picture owns a slot, so an empty ring means the driver already delivered
-    // everything and must not receive another end of stream marker.
+    // Every outstanding picture owns a slot, so an empty ring already delivered everything.
     if (!encoder || pending_count() == 0) {
       return true;
     }
@@ -989,8 +981,7 @@ namespace NVENC_NAMESPACE {
       }
     }
 
-    // The end of stream marker makes the driver encode everything the lookahead still buffered,
-    // so every remaining bitstream is readable and the blocking locks complete immediately.
+    // EOS encodes everything the lookahead still buffered, so the remaining locks complete at once.
     while (pending_count() > 0) {
       if (!reap_one(out_frames)) {
         return false;
