@@ -612,7 +612,7 @@ namespace NVENC_NAMESPACE {
     if (enc_config.rcParams.vbvBufferSize != 0) {
       extra += std::format(
         " vbv={}ms",
-        static_cast<int>(std::lround(enc_config.rcParams.vbvBufferSize * 1000.0 / (client_config.bitrate * 1000.0) * client_config.framerate))
+        static_cast<int>(std::lround(enc_config.rcParams.vbvBufferSize * 1000.0 / (client_config.bitrate * 1000.0)))
       );
     }
     if (enc_config.rcParams.enableLookahead) {
