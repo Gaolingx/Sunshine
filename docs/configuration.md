@@ -2520,7 +2520,8 @@ supported on the current platform.
             @note{This option only applies when using NVENC [encoder](#encoder).}
             @note{A value of 0 keeps the level derived from the tuning info.}
             @note{Requires a non-zero [nvenc_lookahead_depth](#nvenc_lookahead_depth) and NVENC API 13.0.}
-            @note{Values above 3 are clamped to 3, and values above the level the gpu supports are clamped to it.}
+            @note{Only applied to HEVC and AV1. The H.264 encoder rejects a non-zero lookahead level, so the
+            option is ignored for it.}
         </td>
     </tr>
     <tr>

@@ -300,13 +300,14 @@ namespace NVENC_NAMESPACE {
       enc_config.rcParams.vbvBufferSize = static_cast<uint32_t>(std::min<std::uint64_t>(buffer_size, UINT32_MAX));
     }
 
-    configure_lookahead(enc_config, config, encode_guid);
+    configure_lookahead(enc_config, config, encode_guid, client_config.videoFormat);
   }
 
   void nvenc_base::configure_lookahead(
     NV_ENC_CONFIG &enc_config,
     const ::nvenc::nvenc_config &config,
-    const GUID &encode_guid
+    const GUID &encode_guid,
+    int video_format
   ) {
     if (config.lookahead_depth <= 0) {
       if (config.lookahead_level > 0) {
@@ -332,18 +333,11 @@ namespace NVENC_NAMESPACE {
 
 #if NVENC_SDK_VERSION >= 1300
     if (config.lookahead_level > 0) {
-      // The capability reports the highest level the gpu can sustain. A higher level only spends more
-      // encoder time on the same lookahead window, so it improves quality without adding latency.
-      const auto supported_level = get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_LOOKAHEAD_LEVEL);
-      const auto level = std::min({config.lookahead_level, ::nvenc::max_lookahead_level, supported_level});
-      if (level <= 0) {
-        BOOST_LOG(warning) << "NvEnc: gpu doesn't support a configurable lookahead level";
+      if (video_format == 0) {
+        // H.264 rejects a non-zero lookahead level, which would fail the whole NVENC probe
+        BOOST_LOG(warning) << "NvEnc: the H.264 encoder does not support a lookahead level, ignoring it";
       } else {
-        enc_config.rcParams.lookaheadLevel = static_cast<NV_ENC_LOOKAHEAD_LEVEL>(level);
-        if (level < config.lookahead_level) {
-          BOOST_LOG(warning) << "NvEnc: lookahead level "sv << config.lookahead_level
-                             << " is above the supported maximum, using "sv << level;
-        }
+        enc_config.rcParams.lookaheadLevel = static_cast<NV_ENC_LOOKAHEAD_LEVEL>(config.lookahead_level);
       }
     }
 #else
@@ -637,7 +631,7 @@ namespace NVENC_NAMESPACE {
     if (enc_config.rcParams.enableLookahead) {
       extra += std::format(" lookahead={}", enc_config.rcParams.lookaheadDepth);
 #if NVENC_SDK_VERSION >= 1300
-      if (config.lookahead_level > 0) {
+      if (enc_config.rcParams.lookaheadLevel != NV_ENC_LOOKAHEAD_LEVEL_0) {
         extra += std::format("/{}", static_cast<int>(enc_config.rcParams.lookaheadLevel));
       }
 #endif

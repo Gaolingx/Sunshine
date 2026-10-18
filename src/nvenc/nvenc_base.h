@@ -180,7 +180,7 @@ namespace NVENC_NAMESPACE {
     std::shared_ptr<NV_ENCODE_API_FUNCTION_LIST> nvenc;  ///< Function pointers list produced by `NvEncodeAPICreateInstance()`.
                                                          ///< Should be set in `init_library()`.
     std::vector<NV_ENC_REGISTERED_PTR> registered_input_buffers;  ///< Platform-specific input surfaces registered with `NvEncRegisterResource()`.
-                                                                 ///< Should be filled in `create_and_register_input_buffer()`.
+                                                                  ///< Should be filled in `create_and_register_input_buffer()`.
     std::size_t input_surface_count = 1;  ///< Number of input surfaces the encoder rotates through.
     std::size_t current_input_surface = 0;  ///< Index of the input surface that is currently being filled and submitted.
     bool input_surface_filled = false;  ///< Whether the current input surface received a converted frame since the last submission.
@@ -268,11 +268,13 @@ namespace NVENC_NAMESPACE {
      * @param enc_config Encoder configuration to update.
      * @param config NVENC encoder configuration.
      * @param encode_guid Selected codec GUID.
+     * @param video_format Requested video format, `0` is H.264, `1` is HEVC and `2` is AV1.
      */
     void configure_lookahead(
       NV_ENC_CONFIG &enc_config,
       const ::nvenc::nvenc_config &config,
-      const GUID &encode_guid
+      const GUID &encode_guid,
+      int video_format
     );
 
     /**

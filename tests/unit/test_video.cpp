@@ -272,9 +272,18 @@ struct NvencLookaheadTest: PlatformTestSuite {
 };
 
 TEST_F(NvencLookaheadTest, ValidatesAndEncodesWithLookaheadAndVbv) {
+  if (video::validate_encoder(video::nvenc, false)) {
+    return;
+  }
+
+  // Distinguish a machine without a usable NVENC encoder from a configuration that breaks probing.
+  // The H.264 encoder rejects a non-zero lookahead level, so the option must not be applied to it.
+  config::video.nv.lookahead_level = 0;
   if (!video::validate_encoder(video::nvenc, false)) {
     GTEST_SKIP() << "NVENC encoder not available";
   }
+
+  FAIL() << "NVENC encoder only validates when the lookahead level is disabled";
 }
 #endif
 

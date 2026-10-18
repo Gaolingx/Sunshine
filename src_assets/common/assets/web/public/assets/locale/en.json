@@ -341,7 +341,7 @@
     "nvenc_lookahead_depth": "Rate control lookahead depth",
     "nvenc_lookahead_depth_desc": "Number of frames the NVENC rate controller may analyze before encoding them. A deeper lookahead lets the encoder distribute bits across several frames, which improves compression efficiency while the bitrate mode stays constant bitrate and no B-frames are used. The tradeoff is additional latency of roughly the configured number of frames and additional VRAM for the frame buffers. A value of 0 disables lookahead.",
     "nvenc_lookahead_level": "Rate control lookahead level",
-    "nvenc_lookahead_level_desc": "Depth of the analysis applied inside the lookahead window. A higher level spends more encoder time on the same buffered frames, which improves compression efficiency without adding latency. A value of 0 keeps the level derived from the tuning info. Requires a non-zero lookahead depth.",
+    "nvenc_lookahead_level_desc": "Depth of the analysis applied inside the lookahead window. A higher level spends more encoder time on the same buffered frames, which improves compression efficiency without adding latency. A value of 0 keeps the level derived from the tuning info. Requires a non-zero lookahead depth and is only applied to HEVC and AV1, because the H.264 encoder rejects it.",
     "nvenc_max_qp_av1": "Maximum QP (AV1)",
     "nvenc_max_qp_av1_desc": "Maximum QP used by the NVENC AV1 encoder when the maximum QP limit is enabled. AV1 uses a wider QP range than H.264 and HEVC.",
     "nvenc_max_qp_h264": "Maximum QP (H.264)",
