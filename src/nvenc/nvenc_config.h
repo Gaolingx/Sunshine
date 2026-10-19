@@ -152,17 +152,15 @@ namespace nvenc {
    * @brief Compute how many NVENC input surfaces one lookahead depth requires to run.
    *
    * The driver holds `lookahead_depth` pictures in steady state, one more surface is being
-   * converted, and one spare keeps the ring from running full.
+   * converted, and one spare keeps the ring from running full. At least two surfaces are
+   * allocated so that a picture the driver still holds never blocks the next submission.
    *
    * @param lookahead_depth Effective lookahead depth the driver was initialized with.
    * @return Number of input surfaces that must stay allocated and registered.
    */
   inline std::size_t input_surface_count(int lookahead_depth) {
-    if (lookahead_depth <= 0) {
-      return 1;
-    }
-
-    return static_cast<std::size_t>(lookahead_depth) + 2;
+    const auto depth = static_cast<std::size_t>(lookahead_depth > 0 ? lookahead_depth : 0);
+    return depth + 2;
   }
 
 }  // namespace nvenc

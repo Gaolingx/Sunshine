@@ -187,13 +187,14 @@ namespace NVENC_NAMESPACE {
     std::size_t submit_pos = 0;  ///< Index of the next slot handed out for conversion and submission.
     std::size_t reap_pos = 0;  ///< Index of the oldest submitted picture whose bitstream was not retrieved yet.
     std::size_t current_input_surface = 0;  ///< Slot handed out by `acquire_input_surface()` and not submitted yet.
+    std::size_t pending = 0;  ///< Number of submitted pictures whose bitstream was not retrieved yet.
 
     /**
      * @brief Number of pictures held by the driver.
      * @return Number of submitted but not yet retrieved slots.
      */
     std::size_t pending_count() const {
-      return slots.empty() ? 0 : (submit_pos + slots.size() - reap_pos) % slots.size();
+      return pending;
     }
 
     /**

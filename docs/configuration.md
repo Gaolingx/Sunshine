@@ -2488,7 +2488,7 @@ supported on the current platform.
             Sunshine submits duplicates of a captured picture to release it immediately, so the added latency
             does not depend on the capture rate and [minimum_fps_target](#minimum_fps_target) still applies.}
             @note{Each frame of depth needs one registered input surface, so the encoder allocates
-            `nvenc_lookahead_depth + 2` surfaces.}
+            `nvenc_lookahead_depth + 2` surfaces, with a minimum of 2.}
             @note{Reference frame invalidation is disabled while the lookahead is active, because the frames inside
             the window are already encoded when a packet loss is reported. Lost frames are recovered with a full IDR
             frame instead of a partial repair.}

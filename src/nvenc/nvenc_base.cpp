@@ -831,6 +831,7 @@ namespace NVENC_NAMESPACE {
     submit_pos = 0;
     reap_pos = 0;
     current_input_surface = 0;
+    pending = 0;
     encoder_state = {};
     encoder_params = {};
   }
@@ -892,6 +893,7 @@ namespace NVENC_NAMESPACE {
     }
     slot.mapped = nullptr;
 
+    pending--;
     reap_pos = next_slot(reap_pos);
     out_frames.push_back(std::move(encoded_frame));
     return true;
@@ -953,6 +955,7 @@ namespace NVENC_NAMESPACE {
 
     slot.frame_index = frame_index;
     submit_pos = next_slot(current_input_surface);
+    pending++;
 
     if (status == NV_ENC_ERR_NEED_MORE_INPUT) {
       // The picture is buffered by the driver while the lookahead window fills up.
