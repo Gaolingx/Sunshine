@@ -270,13 +270,11 @@ namespace NVENC_NAMESPACE {
      * @param enc_config Encoder configuration to update.
      * @param config NVENC encoder configuration.
      * @param encode_guid Selected codec GUID.
-     * @param video_format Requested video format, `0` is H.264, `1` is HEVC and `2` is AV1.
      */
     void configure_lookahead(
       NV_ENC_CONFIG &enc_config,
       const ::nvenc::nvenc_config &config,
-      const GUID &encode_guid,
-      int video_format
+      const GUID &encode_guid
     );
 
     /**

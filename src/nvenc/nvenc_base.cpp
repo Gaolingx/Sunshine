@@ -61,6 +61,16 @@ namespace {
   }
 
   /**
+   * @brief Determine whether a codec GUID selects the H.264 encoder.
+   *
+   * @param encode_guid Codec GUID to check.
+   * @return `true` for H.264, otherwise `false`.
+   */
+  bool is_h264_codec(const GUID &encode_guid) {
+    return std::memcmp(&encode_guid, &NV_ENC_CODEC_H264_GUID, sizeof(GUID)) == 0;
+  }
+
+  /**
    * @brief Get the display name for a Sunshine video format.
    *
    * @param video_format Sunshine video format identifier.
@@ -294,14 +304,13 @@ namespace NVENC_NAMESPACE {
       enc_config.rcParams.vbvBufferSize = static_cast<uint32_t>(std::min<std::uint64_t>(buffer_size, UINT32_MAX));
     }
 
-    configure_lookahead(enc_config, config, encode_guid, client_config.videoFormat);
+    configure_lookahead(enc_config, config, encode_guid);
   }
 
   void nvenc_base::configure_lookahead(
     NV_ENC_CONFIG &enc_config,
     const ::nvenc::nvenc_config &config,
-    const GUID &encode_guid,
-    int video_format
+    const GUID &encode_guid
   ) {
     if (config.lookahead_depth <= 0) {
       if (config.lookahead_level > 0) {
@@ -327,13 +336,13 @@ namespace NVENC_NAMESPACE {
     enc_config.rcParams.disableBadapt = 1;
 
 #if NVENC_SDK_VERSION >= 1300
-    if (config.lookahead_level > 0) {
-      if (video_format == 0) {
-        // H.264 rejects a non-zero lookahead level, which would fail the whole NVENC probe
-        BOOST_LOG(warning) << "NvEnc: the H.264 encoder does not support a lookahead level, ignoring it";
-      } else {
-        enc_config.rcParams.lookaheadLevel = static_cast<NV_ENC_LOOKAHEAD_LEVEL>(config.lookahead_level);
-      }
+    // The capability is reported per codec, but H.264 advertises it and then rejects the level.
+    const auto supported_level = is_h264_codec(encode_guid) ? 0 : get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_LOOKAHEAD_LEVEL);
+    const auto level = std::min({config.lookahead_level, supported_level});
+    if (level > 0) {
+      enc_config.rcParams.lookaheadLevel = static_cast<NV_ENC_LOOKAHEAD_LEVEL>(level);
+    } else if (config.lookahead_level > 0) {
+      BOOST_LOG(warning) << "NvEnc: lookahead level is not supported by this encoder";
     }
 #else
     if (config.lookahead_level > 0) {
