@@ -49,16 +49,44 @@ const config = ref(props.config)
       <div class="form-text">{{ $t('config.nvenc_twopass_desc') }}</div>
     </div>
 
+    <!-- VBV/HRD buffer size in milliseconds -->
+    <div class="mb-3">
+      <label for="nvenc_vbv_ms" class="form-label">{{ $t('config.nvenc_vbv_ms') }}</label>
+      <input type="number" min="0" max="1000" class="form-control" id="nvenc_vbv_ms" placeholder="0"
+             v-model="config.nvenc_vbv_ms" />
+      <div class="form-text">
+        {{ $t('config.nvenc_vbv_ms_desc') }}<br>
+        <br>
+        <a href="https://en.wikipedia.org/wiki/Video_buffering_verifier">VBV/HRD</a>
+      </div>
+    </div>
+
+    <!-- Rate control lookahead depth -->
+    <div class="mb-3">
+      <label for="nvenc_lookahead_depth" class="form-label">{{ $t('config.nvenc_lookahead_depth') }}</label>
+      <input type="number" min="0" max="16" class="form-control" id="nvenc_lookahead_depth" placeholder="0"
+             v-model="config.nvenc_lookahead_depth" />
+      <div class="form-text">{{ $t('config.nvenc_lookahead_depth_desc') }}</div>
+    </div>
+
+    <!-- Rate control lookahead level -->
+    <div class="mb-3">
+      <label for="nvenc_lookahead_level" class="form-label">{{ $t('config.nvenc_lookahead_level') }}</label>
+      <input type="number" min="0" max="3" class="form-control" id="nvenc_lookahead_level" placeholder="0"
+             v-model="config.nvenc_lookahead_level" />
+      <div class="form-text">{{ $t('config.nvenc_lookahead_level_desc') }}</div>
+    </div>
+
     <!-- Adaptive quantization -->
     <div class="mb-3 accordion">
       <div class="accordion-item">
         <h2 class="accordion-header">
           <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                  data-bs-target="#panelsStayOpen-collapseAq">
+                  data-bs-target="#panelsStayOpen-collapseOne">
             {{ $t('config.nvenc_aq') }}
           </button>
         </h2>
-        <div id="panelsStayOpen-collapseAq" class="accordion-collapse collapse show">
+        <div id="panelsStayOpen-collapseOne" class="accordion-collapse collapse">
           <div class="accordion-body">
             <!-- Spatial AQ -->
             <Checkbox class="mb-3"
@@ -88,39 +116,11 @@ const config = ref(props.config)
       </div>
     </div>
 
-    <!-- VBV/HRD buffer size in milliseconds -->
-    <div class="mb-3">
-      <label for="nvenc_vbv_ms" class="form-label">{{ $t('config.nvenc_vbv_ms') }}</label>
-      <input type="number" min="0" max="1000" class="form-control" id="nvenc_vbv_ms" placeholder="0"
-             v-model="config.nvenc_vbv_ms" />
-      <div class="form-text">
-        {{ $t('config.nvenc_vbv_ms_desc') }}<br>
-        <br>
-        <a href="https://en.wikipedia.org/wiki/Video_buffering_verifier">VBV/HRD</a>
-      </div>
-    </div>
-
-    <!-- Rate control lookahead depth -->
-    <div class="mb-3">
-      <label for="nvenc_lookahead_depth" class="form-label">{{ $t('config.nvenc_lookahead_depth') }}</label>
-      <input type="number" min="0" max="16" class="form-control" id="nvenc_lookahead_depth" placeholder="0"
-             v-model="config.nvenc_lookahead_depth" />
-      <div class="form-text">{{ $t('config.nvenc_lookahead_depth_desc') }}</div>
-    </div>
-
-    <!-- Rate control lookahead level -->
-    <div class="mb-3">
-      <label for="nvenc_lookahead_level" class="form-label">{{ $t('config.nvenc_lookahead_level') }}</label>
-      <input type="number" min="0" max="3" class="form-control" id="nvenc_lookahead_level" placeholder="0"
-             v-model="config.nvenc_lookahead_level" />
-      <div class="form-text">{{ $t('config.nvenc_lookahead_level_desc') }}</div>
-    </div>
-
     <!-- Advanced compression options -->
     <div class="mb-3 accordion">
       <div class="accordion-item">
         <h2 class="accordion-header">
-          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+          <button class="accordion-button" type="button" data-bs-toggle="collapse"
                   data-bs-target="#panelsStayOpen-collapseTwo">
             {{ $t('config.nvenc_compression') }}
           </button>
@@ -151,7 +151,7 @@ const config = ref(props.config)
     <div class="mb-3 accordion">
       <div class="accordion-item">
         <h2 class="accordion-header">
-          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+          <button class="accordion-button" type="button" data-bs-toggle="collapse"
                   data-bs-target="#panelsStayOpen-collapseThree">
             {{ $t('config.nvenc_qp_limits') }}
           </button>
@@ -225,11 +225,11 @@ const config = ref(props.config)
       <div class="accordion-item">
         <h2 class="accordion-header">
           <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                  data-bs-target="#panelsStayOpen-collapseOne">
+                  data-bs-target="#panelsStayOpen-collapseFour">
             {{ $t('config.misc') }}
           </button>
         </h2>
-        <div id="panelsStayOpen-collapseOne" class="accordion-collapse collapse show"
+        <div id="panelsStayOpen-collapseFour" class="accordion-collapse collapse show"
              aria-labelledby="panelsStayOpen-headingOne">
           <div class="accordion-body">
             <!-- NVENC Realtime HAGS priority -->
