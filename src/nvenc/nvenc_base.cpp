@@ -936,6 +936,8 @@ namespace NVENC_NAMESPACE {
     pic_params.inputWidth = encoder_params.width;
     pic_params.inputHeight = encoder_params.height;
     pic_params.encodePicFlags = force_idr ? NV_ENC_PIC_FLAG_FORCEIDR : 0;
+    // The SDK requires a frame index that increases monotonically from zero over the session lifetime
+    pic_params.frameIdx = encoder_state.submitted_frame_count;
     pic_params.inputTimeStamp = frame_index;
     pic_params.pictureStruct = NV_ENC_PIC_STRUCT_FRAME;
     pic_params.inputBuffer = mapped_input_buffer.mappedResource;
@@ -954,6 +956,7 @@ namespace NVENC_NAMESPACE {
     }
 
     slot.frame_index = frame_index;
+    encoder_state.submitted_frame_count++;
     submit_pos = next_slot(current_input_surface);
     pending++;
 

@@ -421,6 +421,7 @@ namespace NVENC_NAMESPACE {
     struct {
       uint64_t last_encoded_frame_index = 0;  ///< Index of the most recently completed frame, used for RFI.
       std::uint64_t completed_frame_count = 0;  ///< Number of frames whose bitstream has been retrieved.
+      std::uint32_t submitted_frame_count = 0;  ///< Number of pictures submitted to the driver, used as `frameIdx`.
       bool rfi_needs_confirmation = false;  ///< Whether the next retrieved frame must be flagged as post-RFI.
       std::pair<uint64_t, uint64_t> last_rfi_range;  ///< Last fulfilled RFI range.
       logging::min_max_avg_periodic_logger<double> frame_size_logger = {debug, "NvEnc: encoded frame sizes in kB", ""};  ///< Frame size statistics.
