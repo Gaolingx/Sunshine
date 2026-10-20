@@ -273,6 +273,13 @@ namespace NVENC_NAMESPACE {
     }
 
     enc_config.rcParams.enableAQ = config.adaptive_quantization;
+    if (config.temporal_adaptive_quantization) {
+      if (get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_TEMPORAL_AQ)) {
+        enc_config.rcParams.enableTemporalAQ = 1;
+      } else {
+        BOOST_LOG(warning) << "NvEnc: gpu doesn't support temporal AQ";
+      }
+    }
     if (config.aq_strength > 0) {
       // The field stores four bits, higher values are truncated by the driver
       enc_config.rcParams.aqStrength = std::min(config.aq_strength, 15);
@@ -624,11 +631,11 @@ namespace NVENC_NAMESPACE {
     if (encoder_params.rfi) {
       extra += " rfi";
     }
-    if (init_params.enableWeightedPrediction) {
-      extra += " weighted-prediction";
-    }
     if (enc_config.rcParams.enableAQ) {
       extra += " spatial-aq";
+    }
+    if (enc_config.rcParams.enableTemporalAQ) {
+      extra += " temporal-aq";
     }
     if (enc_config.rcParams.aqStrength != 0) {
       extra += std::format(" aq-strength={}", enc_config.rcParams.aqStrength);
@@ -738,8 +745,6 @@ namespace NVENC_NAMESPACE {
     // Synchronous encoding: each nvEncEncodePicture() call finishes one picture, which lets the
     // slot ring derive ownership and progress from the returned status alone.
     init_params.enableEncodeAsync = 0;
-    init_params.enableWeightedPrediction = config.weighted_prediction &&
-                                           get_encoder_cap(init_params.encodeGUID, NV_ENC_CAPS_SUPPORT_WEIGHTED_PREDICTION);
     init_params.encodeWidth = encoder_params.width;
     init_params.darWidth = encoder_params.width;
     init_params.encodeHeight = encoder_params.height;

@@ -49,20 +49,43 @@ const config = ref(props.config)
       <div class="form-text">{{ $t('config.nvenc_twopass_desc') }}</div>
     </div>
 
-    <!-- Spatial AQ -->
-    <Checkbox class="mb-3"
-              id="nvenc_spatial_aq"
-              locale-prefix="config"
-              v-model="config.nvenc_spatial_aq"
-              default="false"
-    ></Checkbox>
+    <!-- Adaptive quantization -->
+    <div class="mb-3 accordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#panelsStayOpen-collapseAq">
+            {{ $t('config.nvenc_aq') }}
+          </button>
+        </h2>
+        <div id="panelsStayOpen-collapseAq" class="accordion-collapse collapse show">
+          <div class="accordion-body">
+            <!-- Spatial AQ -->
+            <Checkbox class="mb-3"
+                      id="nvenc_spatial_aq"
+                      locale-prefix="config"
+                      v-model="config.nvenc_spatial_aq"
+                      default="false"
+            ></Checkbox>
 
-    <!-- Adaptive quantization strength -->
-    <div class="mb-3">
-      <label for="nvenc_aq_strength" class="form-label">{{ $t('config.nvenc_aq_strength') }}</label>
-      <input type="number" min="0" max="15" class="form-control" id="nvenc_aq_strength" placeholder="0"
-             v-model="config.nvenc_aq_strength" />
-      <div class="form-text">{{ $t('config.nvenc_aq_strength_desc') }}</div>
+            <!-- Temporal AQ -->
+            <Checkbox class="mb-3"
+                      id="nvenc_temporal_aq"
+                      locale-prefix="config"
+                      v-model="config.nvenc_temporal_aq"
+                      default="false"
+            ></Checkbox>
+
+            <!-- Adaptive quantization strength -->
+            <div class="mb-3">
+              <label for="nvenc_aq_strength" class="form-label">{{ $t('config.nvenc_aq_strength') }}</label>
+              <input type="number" min="0" max="15" class="form-control" id="nvenc_aq_strength" placeholder="0"
+                     v-model="config.nvenc_aq_strength" />
+              <div class="form-text">{{ $t('config.nvenc_aq_strength_desc') }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- VBV/HRD buffer size in milliseconds -->
@@ -117,14 +140,6 @@ const config = ref(props.config)
                       id="nvenc_nonref_p"
                       locale-prefix="config"
                       v-model="config.nvenc_nonref_p"
-                      default="false"
-            ></Checkbox>
-
-            <!-- Weighted prediction -->
-            <Checkbox class="mb-3"
-                      id="nvenc_weighted_prediction"
-                      locale-prefix="config"
-                      v-model="config.nvenc_weighted_prediction"
                       default="false"
             ></Checkbox>
           </div>

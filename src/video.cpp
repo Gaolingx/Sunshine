@@ -845,9 +845,9 @@ namespace video {
         {"rc"s, NV_ENC_PARAMS_RC_CBR},
         {"multipass"s, &config::video.nv_legacy.multipass},
         {"spatial-aq"s, &config::video.nv_legacy.spatial_aq},
+        {"temporal-aq"s, &config::video.nv_legacy.temporal_aq},
         {"aq-strength"s, &config::video.nv_legacy.aq_strength},
         {"nonref_p"s, &config::video.nv_legacy.nonref_p},
-        {"weighted_pred"s, &config::video.nv_legacy.weighted_pred},
         {"ldkfs"s, &config::video.nv_legacy.ldkfs},
       },
       {},  // SDR-specific options
@@ -871,9 +871,9 @@ namespace video {
         {"rc"s, NV_ENC_PARAMS_RC_CBR},
         {"multipass"s, &config::video.nv_legacy.multipass},
         {"spatial-aq"s, &config::video.nv_legacy.spatial_aq},
+        {"temporal-aq"s, &config::video.nv_legacy.temporal_aq},
         {"aq-strength"s, &config::video.nv_legacy.aq_strength},
         {"nonref_p"s, &config::video.nv_legacy.nonref_p},
-        {"weighted_pred"s, &config::video.nv_legacy.weighted_pred},
         {"ldkfs"s, &config::video.nv_legacy.ldkfs},
       },
       {
@@ -903,9 +903,9 @@ namespace video {
         {"coder"s, &config::video.nv_legacy.h264_coder},
         {"multipass"s, &config::video.nv_legacy.multipass},
         {"spatial-aq"s, &config::video.nv_legacy.spatial_aq},
+        {"temporal-aq"s, &config::video.nv_legacy.temporal_aq},
         {"aq-strength"s, &config::video.nv_legacy.aq_strength},
         {"nonref_p"s, &config::video.nv_legacy.nonref_p},
-        {"weighted_pred"s, &config::video.nv_legacy.weighted_pred},
         {"ldkfs"s, &config::video.nv_legacy.ldkfs},
       },
       {

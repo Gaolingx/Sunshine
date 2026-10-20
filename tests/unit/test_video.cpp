@@ -102,15 +102,15 @@ TEST(NvencAvcodecOptionsTest, ExposesBitrateEfficiencyOptions) {
   const std::array<std::string_view, 4> option_names {
     "ldkfs"sv,
     "aq-strength"sv,
+    "temporal-aq"sv,
     "nonref_p"sv,
-    "weighted_pred"sv,
   };
 
   const std::array<int *, 4> expected_targets {
     &config::video.nv_legacy.ldkfs,
     &config::video.nv_legacy.aq_strength,
+    &config::video.nv_legacy.temporal_aq,
     &config::video.nv_legacy.nonref_p,
-    &config::video.nv_legacy.weighted_pred,
   };
 
   for (const auto *codec : codecs) {
@@ -179,12 +179,12 @@ TEST_F(NvencQualityOptionsTest, AppliesNonReferencePFrames) {
 #endif
 }
 
-TEST_F(NvencQualityOptionsTest, AppliesWeightedPrediction) {
-  config::apply_config_for_test("nvenc_weighted_prediction = enabled\n");
+TEST_F(NvencQualityOptionsTest, AppliesTemporalAdaptiveQuantization) {
+  config::apply_config_for_test("nvenc_temporal_aq = enabled\n");
 
-  EXPECT_TRUE(config::video.nv.weighted_prediction);
+  EXPECT_TRUE(config::video.nv.temporal_adaptive_quantization);
 #if !defined(__ANDROID__) && !defined(__APPLE__)
-  EXPECT_EQ(1, config::video.nv_legacy.weighted_pred);
+  EXPECT_EQ(1, config::video.nv_legacy.temporal_aq);
 #endif
 }
 

@@ -2407,13 +2407,39 @@ supported on the current platform.
     </tr>
 </table>
 
+### nvenc_temporal_aq
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Shift bitrate towards regions that stay perceptually important across successive frames, which improves
+            compression of moving content. Works alongside [nvenc_spatial_aq](#nvenc_spatial_aq).
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+            @warning{Enabling this option may reduce performance.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_temporal_aq = disabled
+            @endcode</td>
+    </tr>
+</table>
+
 ### nvenc_aq_strength
 
 <table>
     <tr>
         <td>Description</td>
         <td colspan="2">
-            Strength of adaptive quantization when spatial AQ is enabled. The scale runs from 1 (low) to
+            Strength of adaptive quantization when spatial or temporal AQ is enabled. The scale runs from 1 (low) to
             15 (aggressive), higher values redistribute more bits towards perceptually important regions at the cost of
             a more uneven quantization.
             @note{This option only applies when using NVENC [encoder](#encoder).}
@@ -2604,32 +2630,6 @@ supported on the current platform.
         <td>Example</td>
         <td colspan="2">@code{}
             nvenc_nonref_p = disabled
-            @endcode</td>
-    </tr>
-</table>
-
-### nvenc_weighted_prediction
-
-<table>
-    <tr>
-        <td>Description</td>
-        <td colspan="2">
-            Enable weighted prediction, which improves compression of fades. Only the NVENC H.264 encoder supports
-            it, and it conflicts with B frames and with adaptive quantization.
-            @note{This option only applies when using NVENC [encoder](#encoder).}
-            @warning{Enabling this option may reduce performance.}
-        </td>
-    </tr>
-    <tr>
-        <td>Default</td>
-        <td colspan="2">@code{}
-            disabled
-            @endcode</td>
-    </tr>
-    <tr>
-        <td>Example</td>
-        <td colspan="2">@code{}
-            nvenc_weighted_prediction = disabled
             @endcode</td>
     </tr>
 </table>

@@ -52,11 +52,11 @@ namespace nvenc {
     // Ratio of I-frame bits to P-frame bits in single frame VBV CBR mode, zero uses the driver default of the tuning info
     int low_delay_key_frame_scale = 0;  ///< Low delay key frame scale.
 
-    // Improves fades compression, uses CUDA cores
-    bool weighted_prediction = false;  ///< Enable weighted prediction for NVENC.
-
     // Allocate more bitrate to flat regions since they're visually more perceptible, uses CUDA cores
     bool adaptive_quantization = false;  ///< Enable adaptive quantization for NVENC.
+
+    // Shift bitrate towards regions that stay perceptually important across frames, uses CUDA cores
+    bool temporal_adaptive_quantization = false;  ///< Enable temporal adaptive quantization for NVENC.
 
     // AQ strength from 1 to 15, zero uses the driver default
     int aq_strength = 0;  ///< Adaptive quantization strength.
