@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fstream>
 #include <future>
+#include <limits>
 #include <optional>
 #include <queue>
 #include <utility>
@@ -1516,6 +1517,32 @@ namespace stream {
   }
 
   /**
+   * @brief Headroom applied on top of the video bitrate when pacing packets.
+   *
+   * IDR frames are much larger than the average frame, so the pacer may run slightly faster than the
+   * encoder to avoid stretching them over a whole frame interval.
+   */
+  constexpr int pacing_headroom_percent = 50;
+
+  /**
+   * @brief Compute how many packets may be sent per millisecond to stay at the target bitrate.
+   *
+   * @param bitrate_kbps Video bitrate in kilobits per second, non-positive disables pacing.
+   * @param fec_percentage FEC overhead percentage sent on top of the video bitrate.
+   * @param blocksize Packet size in bytes including the RTP header.
+   * @return Packets per millisecond, or a very large value when pacing is disabled.
+   */
+  double packets_per_millisecond(int bitrate_kbps, int fec_percentage, int blocksize) {
+    if (bitrate_kbps <= 0 || blocksize <= 0) {
+      return std::numeric_limits<uint32_t>::max();
+    }
+
+    // 1 kbps is 1 bit per millisecond.
+    const auto bits_per_ms = static_cast<double>(bitrate_kbps) * (100 + fec_percentage) * (100 + pacing_headroom_percent) / 10000.0;
+    return std::max(1e-3, bits_per_ms / (blocksize * 8.0));
+  }
+
+  /**
    * @brief Run the broadcast video sender thread.
    *
    * @param sock Socket used to read or write the protocol message.
@@ -1656,8 +1683,9 @@ namespace stream {
       }
 
       try {
-        // Use around 80% of 1Gbps          1Gbps            percent    ms     packet      byte
-        size_t ratecontrol_packets_in_1ms = std::giga::num * 80 / 100 / 1000 / blocksize / 8;
+        // Pace at the session bitrate plus FEC overhead instead of an arbitrary 80% of 1 Gbps, so a
+        // congested link drops packets instead of queueing seconds of video.
+        const auto ratecontrol_packets_in_1ms = packets_per_millisecond(session->config.monitor.bitrate, fecPercentage, blocksize);
 
         // Send less than 64K in a single batch.
         // On Windows, batches above 64K seem to bypass SO_SNDBUF regardless of its size,
@@ -1772,8 +1800,8 @@ namespace stream {
               // to account for the last send_batch() of the previous frame.
               if (ratecontrol_group_packets_sent >= ratecontrol_packets_in_1ms || ratecontrol_frame_packets_sent == 0) {
                 auto due = ratecontrol_frame_start +
-                           std::chrono::duration_cast<std::chrono::nanoseconds>(1ms) *
-                             ratecontrol_frame_packets_sent / ratecontrol_packets_in_1ms;
+                           std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                             std::chrono::duration<double, std::milli>(ratecontrol_frame_packets_sent / ratecontrol_packets_in_1ms));
 
                 auto now = std::chrono::steady_clock::now();
                 if (now < due) {
@@ -1817,8 +1845,8 @@ namespace stream {
 
           // remember this in case the next frame comes immediately
           ratecontrol_next_frame_start = ratecontrol_frame_start +
-                                         std::chrono::duration_cast<std::chrono::nanoseconds>(1ms) *
-                                           ratecontrol_frame_packets_sent / ratecontrol_packets_in_1ms;
+                                         std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                                           std::chrono::duration<double, std::milli>(ratecontrol_frame_packets_sent / ratecontrol_packets_in_1ms));
 
           frame_network_latency_logger.second_point_now_and_log();
 
@@ -1976,7 +2004,7 @@ namespace stream {
       return -1;
     }
 
-    // Set video socket send buffer size (SO_SENDBUF) to 1MB
+    // Pacing bounds the queue on a congested link, the 1MB buffer absorbs scheduling and timer jitter.
     try {
       ctx.video_sock.set_option(boost::asio::socket_base::send_buffer_size(1024 * 1024));
     } catch (...) {

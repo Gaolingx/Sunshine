@@ -1787,6 +1787,7 @@ supported on the current platform.
         <td>Description</td>
         <td colspan="2">
             How long to wait, in milliseconds, for data from Moonlight before shutting down the stream.
+            @note{Raise this if the control channel can stay silent longer than this on a lossy link.}
         </td>
     </tr>
     <tr>

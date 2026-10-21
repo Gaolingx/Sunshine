@@ -10,6 +10,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -22,7 +23,40 @@
 namespace stream {
   std::vector<uint8_t> concat_and_insert(uint64_t insert_size, uint64_t slice_size, const std::string_view &data1, const std::string_view &data2);
   std::optional<std::pair<std::uint16_t, std::string_view>> parse_control_packet(const ENetPacket &packet);
+  double packets_per_millisecond(int bitrate_kbps, int fec_percentage, int blocksize);
 }  // namespace stream
+
+TEST(PacketsPerMillisecondTests, ComputesPacingFromBitrate) {
+  // 10000 kbps over 1000 byte packets is 1.25 packets per millisecond, 1.875 with 50% headroom.
+  EXPECT_DOUBLE_EQ(1.875, stream::packets_per_millisecond(10000, 0, 1000));
+}
+
+TEST(PacketsPerMillisecondTests, IncludesFecOverhead) {
+  // 25% FEC raises the same budget to 18750 bits per millisecond, or 2.34375 packets per millisecond.
+  EXPECT_DOUBLE_EQ(2.34375, stream::packets_per_millisecond(10000, 25, 1000));
+}
+
+TEST(PacketsPerMillisecondTests, KeepsHeadroomAboveEncoderBitrate) {
+  // Pacing must run ahead of the encoder bitrate, but stay close enough to bound the queue on a
+  // congested link.
+  const auto average_rate = static_cast<double>(10000) / (1000 * 8.0);
+
+  EXPECT_GT(stream::packets_per_millisecond(10000, 0, 1000), average_rate);
+  EXPECT_LE(stream::packets_per_millisecond(10000, 0, 1000), average_rate * 1.5);
+}
+
+TEST(PacketsPerMillisecondTests, KeepsPacingAboveZero) {
+  // A tiny bitrate must not produce a zero rate, otherwise the sender would divide by zero.
+  EXPECT_DOUBLE_EQ(1e-3, stream::packets_per_millisecond(1, 0, 1000));
+}
+
+TEST(PacketsPerMillisecondTests, DisablesPacingWithoutBitrateOrPacketSize) {
+  const auto unlimited = static_cast<double>(std::numeric_limits<std::uint32_t>::max());
+
+  EXPECT_DOUBLE_EQ(unlimited, stream::packets_per_millisecond(0, 20, 1000));
+  EXPECT_DOUBLE_EQ(unlimited, stream::packets_per_millisecond(-1, 20, 1000));
+  EXPECT_DOUBLE_EQ(unlimited, stream::packets_per_millisecond(10000, 20, 0));
+}
 
 TEST(ConcatAndInsertTests, ConcatNoInsertionTest) {
   char b1[] = {'a', 'b'};
