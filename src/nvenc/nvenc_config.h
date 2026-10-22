@@ -22,6 +22,27 @@ namespace nvenc {
   constexpr int max_lookahead_level = 3;
 
   /**
+   * @brief Largest H.264 reference picture list L0 accepted by the NVENC SDK.
+   *
+   * `NV_ENC_CONFIG_H264::numRefL0` tops out at `NV_ENC_NUM_REF_FRAMES_7`.
+   */
+  constexpr std::uint32_t max_ref_list_h264 = 7;
+
+  /**
+   * @brief Largest HEVC reference picture list L0 accepted by the NVENC SDK.
+   *
+   * `NV_ENC_CONFIG_HEVC::numRefL0` tops out at `NV_ENC_NUM_REF_FRAMES_7`.
+   */
+  constexpr std::uint32_t max_ref_list_hevc = 7;
+
+  /**
+   * @brief Largest AV1 forward reference count accepted by the NVENC SDK.
+   *
+   * `NV_ENC_CONFIG_AV1::numFwdRefs` only addresses Last, Last2, Last3 and Golden.
+   */
+  constexpr std::uint32_t max_ref_list_av1 = 4;
+
+  /**
    * @brief Enumerates supported nVENC two pass options.
    */
   enum class nvenc_two_pass {
@@ -146,6 +167,20 @@ namespace nvenc {
     }
 
     return single_frame_size;
+  }
+
+  /**
+   * @brief Resolve the DPB size written to the codec configuration.
+   *
+   * The DPB size is an input to the encoder, so it has to be set explicitly to guarantee the
+   * repair window reference frame invalidation relies on.
+   *
+   * @param requested_count Reference frame count requested by the client, zero for the default.
+   * @param default_count DPB size used when the client requests none.
+   * @return DPB size to write, always at least one frame.
+   */
+  inline std::uint32_t dpb_size(int requested_count, std::uint32_t default_count) {
+    return requested_count > 0 ? static_cast<std::uint32_t>(requested_count) : std::max(default_count, std::uint32_t {1});
   }
 
   /**

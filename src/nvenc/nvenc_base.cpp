@@ -266,7 +266,6 @@ namespace NVENC_NAMESPACE {
     enc_config.gopLength = NVENC_INFINITE_GOPLENGTH;
     enc_config.frameIntervalP = 1;
     enc_config.rcParams.rateControlMode = NV_ENC_PARAMS_RC_CBR;
-    enc_config.rcParams.zeroReorderDelay = 1;
     enc_config.rcParams.enableLookahead = 0;
     // Leave the driver default in place, it is derived from the tuning info
     if (config.low_delay_key_frame_scale > 0) {
@@ -357,20 +356,23 @@ namespace NVENC_NAMESPACE {
   }
 
   void nvenc_base::configure_reference_frames(
-    std::uint32_t &ref_frames_option,
-    NV_ENC_NUM_REF_FRAMES &list0_option,
+    std::uint32_t &max_num_ref_frames,
+    NV_ENC_NUM_REF_FRAMES &list_option,
     std::uint32_t default_count,
     int requested_count,
+    std::uint32_t list_limit,
     const GUID &encode_guid
   ) {
-    ref_frames_option = requested_count > 0 ? static_cast<std::uint32_t>(requested_count) : default_count;
-    if (ref_frames_option > 0U && !get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_MULTIPLE_REF_FRAMES)) {
-      ref_frames_option = 1;
+    max_num_ref_frames = ::nvenc::dpb_size(requested_count, default_count);
+    if (!get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_MULTIPLE_REF_FRAMES)) {
+      max_num_ref_frames = 1;
       encoder_params.rfi = false;
     }
-    encoder_params.ref_frames_in_dpb = ref_frames_option;
-    // Limit each frame to one reference while keeping a larger DPB for RFI fallback.
-    list0_option = NV_ENC_NUM_REF_FRAMES_1;
+    encoder_params.ref_frames_in_dpb = max_num_ref_frames;
+
+    // Use every frame the DPB already holds: the SPS advertises the same count, so limiting the
+    // prediction list saves nothing on the decoder side and only costs compression efficiency.
+    list_option = static_cast<NV_ENC_NUM_REF_FRAMES>(std::clamp(max_num_ref_frames, 1U, list_limit));
   }
 
   template<typename FormatConfig>
@@ -444,7 +446,7 @@ namespace NVENC_NAMESPACE {
     format_config.entropyCodingMode = config.h264_cavlc || !get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_CABAC) ?
                                         NV_ENC_H264_ENTROPY_CODING_MODE_CAVLC :
                                         NV_ENC_H264_ENTROPY_CODING_MODE_CABAC;
-    configure_reference_frames(format_config.maxNumRefFrames, format_config.numRefL0, 5, client_config.numRefFrames, encode_guid);
+    configure_reference_frames(format_config.maxNumRefFrames, format_config.numRefL0, 5, client_config.numRefFrames, ::nvenc::max_ref_list_h264, encode_guid);
 
     if (config.enable_min_qp) {
       enc_config.rcParams.enableMinQP = 1;
@@ -487,7 +489,7 @@ namespace NVENC_NAMESPACE {
       format_config.pixelBitDepthMinus8 = 2;
 #endif
     }
-    configure_reference_frames(format_config.maxNumRefFramesInDPB, format_config.numRefL0, 5, client_config.numRefFrames, encode_guid);
+    configure_reference_frames(format_config.maxNumRefFramesInDPB, format_config.numRefL0, 5, client_config.numRefFrames, ::nvenc::max_ref_list_hevc, encode_guid);
 
     if (config.enable_min_qp) {
       enc_config.rcParams.enableMinQP = 1;
@@ -535,7 +537,7 @@ namespace NVENC_NAMESPACE {
     format_config.matrixCoefficients = colorspace.matrix;
     format_config.colorRange = colorspace.full_range;
     format_config.chromaSamplePosition = buffer_is_yuv444(buffer_format) ? 0 : 1;
-    configure_reference_frames(format_config.maxNumRefFramesInDPB, format_config.numFwdRefs, 8, client_config.numRefFrames, encode_guid);
+    configure_reference_frames(format_config.maxNumRefFramesInDPB, format_config.numFwdRefs, 8, client_config.numRefFrames, ::nvenc::max_ref_list_av1, encode_guid);
 
     if (config.enable_min_qp) {
       enc_config.rcParams.enableMinQP = 1;

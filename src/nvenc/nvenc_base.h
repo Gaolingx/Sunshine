@@ -280,17 +280,19 @@ namespace NVENC_NAMESPACE {
     /**
      * @brief Configure the requested reference-frame count.
      *
-     * @param ref_frames_option Codec-specific reference-frame option.
-     * @param list0_option Codec-specific list-zero option.
+     * @param max_num_ref_frames Codec-specific reference-frame option.
+     * @param list_option Codec-specific list-zero option.
      * @param default_count Default reference-frame count.
      * @param requested_count Client-requested reference-frame count.
+     * @param list_limit Largest list size the codec accepts.
      * @param encode_guid Selected codec GUID.
      */
     void configure_reference_frames(
-      std::uint32_t &ref_frames_option,
-      NV_ENC_NUM_REF_FRAMES &list0_option,
+      std::uint32_t &max_num_ref_frames,
+      NV_ENC_NUM_REF_FRAMES &list_option,
       std::uint32_t default_count,
       int requested_count,
+      std::uint32_t list_limit,
       const GUID &encode_guid
     );
 
