@@ -82,16 +82,3 @@ TEST(NvencConfigTest, ReportsNoBufferForDegenerateBitrateOrFramerate) {
   EXPECT_EQ(0u, nvenc::vbv_buffer_size_bits(config, 60, 0));
   EXPECT_EQ(0u, nvenc::vbv_buffer_size_bits(config, -1, -1));
 }
-
-TEST(NvencConfigTest, KeepsTwoInputSurfacesWhenLookaheadIsDisabled) {
-  EXPECT_EQ(2u, nvenc::input_surface_count(0));
-  EXPECT_EQ(2u, nvenc::input_surface_count(-1));
-}
-
-TEST(NvencConfigTest, ReservesOneSurfacePerLookaheadDepthPlusTwoSlots) {
-  for (int depth = 1; depth <= nvenc::max_lookahead_depth; ++depth) {
-    const auto surfaces = nvenc::input_surface_count(depth);
-    EXPECT_EQ(static_cast<std::size_t>(depth) + 2, surfaces);
-    EXPECT_GT(surfaces, static_cast<std::size_t>(depth));
-  }
-}

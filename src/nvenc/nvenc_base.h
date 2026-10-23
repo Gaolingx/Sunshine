@@ -71,7 +71,6 @@ namespace NVENC_NAMESPACE {
      *        The driver may keep reading that surface, so the frame has to be copied into a fresh
      *        surface before it can be submitted again.
      * @param out_frames List that receives the frame that became available during this call.
-     *        Stays empty while the rate control lookahead window is being filled.
      * @return `true` on success, `false` on error.
      */
     bool encode_frame(uint64_t frame_index, bool force_idr, bool repeat_last_frame, std::vector<::nvenc::nvenc_encoded_frame> &out_frames) override;
@@ -91,12 +90,6 @@ namespace NVENC_NAMESPACE {
      *         After error next frame must be encoded with `force_idr = true`.
      */
     bool invalidate_ref_frames(uint64_t first_frame, uint64_t last_frame) override;
-
-    /**
-     * @brief Get the rate control lookahead depth the driver was initialized with.
-     * @return Effective lookahead depth, zero when lookahead is disabled or unsupported.
-     */
-    int lookahead_depth() const override;
 
   protected:
     /**
@@ -157,7 +150,6 @@ namespace NVENC_NAMESPACE {
       uint32_t height = 0;
       NV_ENC_BUFFER_FORMAT buffer_format = NV_ENC_BUFFER_FORMAT_UNDEFINED;
       uint32_t ref_frames_in_dpb = 0;
-      int lookahead_depth = 0;
       bool rfi = false;
     } encoder_params;  ///< Current encoder dimensions, pixel format, and reference-frame settings.
 
@@ -261,19 +253,6 @@ namespace NVENC_NAMESPACE {
       NV_ENC_CONFIG &enc_config,
       const ::nvenc::nvenc_config &config,
       const video::config_t &client_config,
-      const GUID &encode_guid
-    );
-
-    /**
-     * @brief Configure the rate control lookahead window.
-     *
-     * @param enc_config Encoder configuration to update.
-     * @param config NVENC encoder configuration.
-     * @param encode_guid Selected codec GUID.
-     */
-    void configure_lookahead(
-      NV_ENC_CONFIG &enc_config,
-      const ::nvenc::nvenc_config &config,
       const GUID &encode_guid
     );
 

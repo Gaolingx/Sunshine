@@ -1616,8 +1616,6 @@ namespace config {
 
     int_between_f(vars, "nvenc_preset", video.nv.quality_preset, {1, 7});
     int_between_f(vars, "nvenc_vbv_ms", video.nv.vbv_milliseconds, {0, 1000});
-    int_between_f(vars, "nvenc_lookahead_depth", video.nv.lookahead_depth, {0, nvenc::max_lookahead_depth});
-    int_between_f(vars, "nvenc_lookahead_level", video.nv.lookahead_level, {0, nvenc::max_lookahead_level});
     int_between_f(vars, "nvenc_ldkfs", video.nv.low_delay_key_frame_scale, {0, 10});
     bool_f(vars, "nvenc_spatial_aq", video.nv.adaptive_quantization);
     bool_f(vars, "nvenc_temporal_aq", video.nv.temporal_adaptive_quantization);
