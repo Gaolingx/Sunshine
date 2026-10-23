@@ -61,22 +61,6 @@ const config = ref(props.config)
       </div>
     </div>
 
-    <!-- Rate control lookahead depth -->
-    <div class="mb-3">
-      <label for="nvenc_lookahead_depth" class="form-label">{{ $t('config.nvenc_lookahead_depth') }}</label>
-      <input type="number" min="0" max="16" class="form-control" id="nvenc_lookahead_depth" placeholder="0"
-             v-model="config.nvenc_lookahead_depth" />
-      <div class="form-text">{{ $t('config.nvenc_lookahead_depth_desc') }}</div>
-    </div>
-
-    <!-- Rate control lookahead level -->
-    <div class="mb-3">
-      <label for="nvenc_lookahead_level" class="form-label">{{ $t('config.nvenc_lookahead_level') }}</label>
-      <input type="number" min="0" max="3" class="form-control" id="nvenc_lookahead_level" placeholder="0"
-             v-model="config.nvenc_lookahead_level" />
-      <div class="form-text">{{ $t('config.nvenc_lookahead_level_desc') }}</div>
-    </div>
-
     <!-- Adaptive quantization -->
     <div class="mb-3 accordion">
       <div class="accordion-item">
@@ -127,6 +111,22 @@ const config = ref(props.config)
         </h2>
         <div id="panelsStayOpen-collapseTwo" class="accordion-collapse collapse">
           <div class="accordion-body">
+            <!-- Rate control lookahead depth -->
+            <div class="mb-3">
+              <label for="nvenc_lookahead_depth" class="form-label">{{ $t('config.nvenc_lookahead_depth') }}</label>
+              <input type="number" min="0" max="16" class="form-control" id="nvenc_lookahead_depth" placeholder="0"
+                     v-model="config.nvenc_lookahead_depth" />
+              <div class="form-text">{{ $t('config.nvenc_lookahead_depth_desc') }}</div>
+            </div>
+
+            <!-- Rate control lookahead level -->
+            <div class="mb-3">
+              <label for="nvenc_lookahead_level" class="form-label">{{ $t('config.nvenc_lookahead_level') }}</label>
+              <input type="number" min="0" max="3" class="form-control" id="nvenc_lookahead_level" placeholder="0"
+                     v-model="config.nvenc_lookahead_level" />
+              <div class="form-text">{{ $t('config.nvenc_lookahead_level_desc') }}</div>
+            </div>
+
             <!-- Low delay key frame scale -->
             <div class="mb-3">
               <label for="nvenc_ldkfs" class="form-label">{{ $t('config.nvenc_ldkfs') }}</label>
