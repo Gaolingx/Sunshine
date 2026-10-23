@@ -82,3 +82,21 @@ TEST(NvencConfigTest, ReportsNoBufferForDegenerateBitrateOrFramerate) {
   EXPECT_EQ(0u, nvenc::vbv_buffer_size_bits(config, 60, 0));
   EXPECT_EQ(0u, nvenc::vbv_buffer_size_bits(config, -1, -1));
 }
+
+TEST(NvencConfigTest, EnablesUnidirectionalBFramesWithTwoReferences) {
+  EXPECT_TRUE(nvenc::use_unidirectional_b_frames(true, true, 2));
+  EXPECT_TRUE(nvenc::use_unidirectional_b_frames(true, true, 5));
+}
+
+TEST(NvencConfigTest, KeepsUnidirectionalBFramesDisabledWhenNotRequested) {
+  EXPECT_FALSE(nvenc::use_unidirectional_b_frames(false, true, 5));
+}
+
+TEST(NvencConfigTest, KeepsUnidirectionalBFramesDisabledWithoutGpuSupport) {
+  EXPECT_FALSE(nvenc::use_unidirectional_b_frames(true, false, 5));
+}
+
+TEST(NvencConfigTest, KeepsUnidirectionalBFramesDisabledWithLessThanTwoReferences) {
+  EXPECT_FALSE(nvenc::use_unidirectional_b_frames(true, true, 1));
+  EXPECT_FALSE(nvenc::use_unidirectional_b_frames(true, true, 0));
+}

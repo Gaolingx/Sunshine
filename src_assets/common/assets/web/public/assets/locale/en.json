@@ -374,6 +374,8 @@
     "nvenc_twopass_disabled": "Disabled (fastest, not recommended)",
     "nvenc_twopass_full_res": "Full resolution (slower)",
     "nvenc_twopass_quarter_res": "Quarter resolution (faster, default)",
+    "nvenc_unidirectional_b": "Unidirectional B-frames",
+    "nvenc_unidirectional_b_desc": "Replace P-frames with B-frames that reference only past frames. This improves compression efficiency without adding latency because the decode order stays equal to the display order. Only supported by the NVENC HEVC encoder with at least two reference frames.",
     "nvenc_vbv_ms": "VBV/HRD buffer size in milliseconds",
     "nvenc_vbv_ms_desc": "Size of the VBV/HRD buffer expressed in milliseconds of the target bitrate, which is the bitrate requested by the client capped by the max bitrate setting. The default of 0 keeps the single-frame buffer, which leaves the rate controller no room to spend extra bits on complex frames. A positive value gives the rate controller a longer window while the bitrate mode stays constant bitrate, at the cost of a burst that the network must be able to absorb.",
     "origin_web_ui_allowed": "Origin Web UI Allowed",

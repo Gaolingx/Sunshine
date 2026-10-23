@@ -74,6 +74,9 @@ namespace nvenc {
     // Insert automatically chosen non-reference P-frames, saves bitrate on static content
     bool non_reference_p_frames = false;  ///< Enable non-reference P-frames for NVENC.
 
+    // Replace P-frames with B-frames that only reference past frames, improves compression without adding latency
+    bool unidirectional_b_frames = false;  ///< Enable unidirectional B-frames for NVENC.
+
     // Don't use QP below certain value, limits peak image quality to save bitrate
     bool enable_min_qp = false;  ///< Enable minimum QP limits for NVENC.
 
@@ -164,6 +167,24 @@ namespace nvenc {
    */
   inline std::uint32_t dpb_size(int requested_count, std::uint32_t default_count) {
     return requested_count > 0 ? static_cast<std::uint32_t>(requested_count) : std::max(default_count, std::uint32_t {1});
+  }
+
+  /**
+   * @brief Decide whether P-frames can be replaced with unidirectional B-frames.
+   *
+   * Unidirectional B-frames predict from two past frames, so they need at least two reference
+   * frames in the DPB. They keep the decode order equal to the display order, which is why they
+   * do not add latency.
+   *
+   * The NVENC SDK currently exposes this feature for the HEVC encoder only.
+   *
+   * @param requested Whether the configuration enables the feature.
+   * @param supported Whether the GPU reports support for the feature.
+   * @param ref_frames_in_dpb Reference frames available in the DPB.
+   * @return True when the encoder can use unidirectional B-frames.
+   */
+  inline bool use_unidirectional_b_frames(bool requested, bool supported, std::uint32_t ref_frames_in_dpb) {
+    return requested && supported && ref_frames_in_dpb >= 2;
   }
 
 }  // namespace nvenc
