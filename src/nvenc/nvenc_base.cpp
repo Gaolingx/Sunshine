@@ -921,7 +921,7 @@ namespace NVENC_NAMESPACE {
     }
 
     // The duplicated frame must not reuse a surface the driver still reads.
-    if (repeat_last_frame && pending_count() > 0) {
+    if (repeat_last_frame) {
       const auto previous_surface = current_input_surface;
       if (!acquire_input_surface()) {
         return false;
