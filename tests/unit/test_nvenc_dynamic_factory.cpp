@@ -65,10 +65,6 @@ namespace {
       return true;
     }
 
-    int lookahead_depth() const override {
-      return 0;
-    }
-
     std::size_t get_input_texture_count() const override {
       return 1;
     }

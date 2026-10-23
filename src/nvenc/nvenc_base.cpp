@@ -61,16 +61,6 @@ namespace {
   }
 
   /**
-   * @brief Determine whether a codec GUID selects the H.264 encoder.
-   *
-   * @param encode_guid Codec GUID to check.
-   * @return `true` for H.264, otherwise `false`.
-   */
-  bool is_h264_codec(const GUID &encode_guid) {
-    return std::memcmp(&encode_guid, &NV_ENC_CODEC_H264_GUID, sizeof(GUID)) == 0;
-  }
-
-  /**
    * @brief Get the display name for a Sunshine video format.
    *
    * @param video_format Sunshine video format identifier.
@@ -301,57 +291,6 @@ namespace NVENC_NAMESPACE {
     if (get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE)) {
       const auto buffer_size = ::nvenc::vbv_buffer_size_bits(config, client_config.framerate, bitrate_kbps);
       enc_config.rcParams.vbvBufferSize = static_cast<uint32_t>(std::min<std::uint64_t>(buffer_size, UINT32_MAX));
-    }
-
-    configure_lookahead(enc_config, config, encode_guid);
-  }
-
-  void nvenc_base::configure_lookahead(
-    NV_ENC_CONFIG &enc_config,
-    const ::nvenc::nvenc_config &config,
-    const GUID &encode_guid
-  ) {
-    if (config.lookahead_depth <= 0) {
-      if (config.lookahead_level > 0) {
-        BOOST_LOG(warning) << "NvEnc: lookahead level has no effect without a lookahead depth";
-      }
-      return;
-    }
-
-    if (!get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_LOOKAHEAD)) {
-      BOOST_LOG(warning) << "NvEnc: gpu doesn't support lookahead";
-      return;
-    }
-
-    // The SDK limits the depth to 31 minus the number of B-frames, and Sunshine always encodes without B-frames
-    const auto depth = std::min(config.lookahead_depth, ::nvenc::max_lookahead_depth);
-
-    enc_config.rcParams.enableLookahead = 1;
-    enc_config.rcParams.lookaheadDepth = static_cast<uint16_t>(depth);
-    encoder_params.lookahead_depth = depth;
-    // Adaptive I-frame insertion would break the infinite GOP and produce unpredictable bitrate spikes
-    enc_config.rcParams.disableIadapt = 1;
-    // Adaptive B-frame insertion is meaningless without B-frames, disable it to keep the output order fixed
-    enc_config.rcParams.disableBadapt = 1;
-
-#if NVENC_SDK_VERSION >= 1300
-    // The capability is reported per codec, but H.264 advertises it and then rejects the level.
-    const auto supported_level = is_h264_codec(encode_guid) ? 0 : get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_LOOKAHEAD_LEVEL);
-    const auto level = std::min({config.lookahead_level, supported_level});
-    if (level > 0) {
-      enc_config.rcParams.lookaheadLevel = static_cast<NV_ENC_LOOKAHEAD_LEVEL>(level);
-    } else if (config.lookahead_level > 0) {
-      BOOST_LOG(warning) << "NvEnc: lookahead level is not supported by this encoder";
-    }
-#else
-    if (config.lookahead_level > 0) {
-      BOOST_LOG(warning) << "NvEnc: lookahead level requires NVENC API 13.0; ignoring it";
-    }
-#endif
-
-    if (depth < config.lookahead_depth) {
-      BOOST_LOG(warning) << "NvEnc: lookahead depth "sv << config.lookahead_depth
-                         << " is above the supported maximum, using "sv << depth;
     }
   }
 
@@ -589,7 +528,8 @@ namespace NVENC_NAMESPACE {
     }
 
     // Bitstream buffers are paired with input slots by index; the platform layer fills the slots.
-    const auto slot_count = ::nvenc::input_surface_count(encoder_params.lookahead_depth);
+    // Two surfaces suffice: one is submitted while the driver may still read the other.
+    constexpr std::size_t slot_count = 2;
     slots.resize(slot_count);
     bitstreams.reserve(slot_count);
     for (std::size_t i = 0; i < slot_count; i++) {
@@ -627,14 +567,6 @@ namespace NVENC_NAMESPACE {
         " vbv={}ms",
         static_cast<int>(std::lround(enc_config.rcParams.vbvBufferSize * 1000.0 / (bitrate_kbps * 1000.0)))
       );
-    }
-    if (enc_config.rcParams.enableLookahead) {
-      extra += std::format(" lookahead={}", enc_config.rcParams.lookaheadDepth);
-#if NVENC_SDK_VERSION >= 1300
-      if (enc_config.rcParams.lookaheadLevel != NV_ENC_LOOKAHEAD_LEVEL_0) {
-        extra += std::format("/{}", static_cast<int>(enc_config.rcParams.lookaheadLevel));
-      }
-#endif
     }
     if (config.low_delay_key_frame_scale > 0) {
       extra += std::format(" ldkfs={}", config.low_delay_key_frame_scale);
@@ -780,11 +712,6 @@ namespace NVENC_NAMESPACE {
     configure_codec(enc_config, config, client_config, colorspace, buffer_format, init_params.encodeGUID);
     init_params.encodeConfig = &enc_config;
 
-    // Frames inside the lookahead window are already encoded, so invalidation cannot repair them.
-    if (encoder_params.lookahead_depth > 0) {
-      encoder_params.rfi = false;
-    }
-
     if (!initialize_encoder_resources(init_params)) {
       return false;
     }
@@ -802,9 +729,8 @@ namespace NVENC_NAMESPACE {
 
   void nvenc_base::destroy_encoder() {
     if (encoder) {
-      // Pictures still buffered by the rate control lookahead keep their input resources mapped and
-      // their bitstreams in use. Drain them first, otherwise the driver tears down objects it still
-      // references and crashes.
+      // Pictures still buffered by the driver keep their input resources mapped and their bitstreams
+      // in use. Drain them first, otherwise the driver tears down objects it still references and crashes.
       std::vector<::nvenc::nvenc_encoded_frame> discarded;
       flush(discarded);
     }
@@ -977,7 +903,7 @@ namespace NVENC_NAMESPACE {
     pending++;
 
     if (status == NV_ENC_ERR_NEED_MORE_INPUT) {
-      // The picture is buffered by the driver while the lookahead window fills up.
+      // The driver buffered the picture and needs another submission before a bitstream is available.
       return true;
     }
 
@@ -1003,7 +929,7 @@ namespace NVENC_NAMESPACE {
       }
     }
 
-    // EOS encodes everything the lookahead still buffered, so the remaining locks complete at once.
+    // EOS encodes everything the driver still buffered, so the remaining locks complete at once.
     while (pending_count() > 0) {
       if (!reap_one(out_frames)) {
         return false;
@@ -1054,10 +980,6 @@ namespace NVENC_NAMESPACE {
     encoder_state.rfi_needs_confirmation = true;
 
     return true;
-  }
-
-  int nvenc_base::lookahead_depth() const {
-    return encoder_params.lookahead_depth;
   }
 
   bool nvenc_base::nvenc_failed(NVENCSTATUS status) {

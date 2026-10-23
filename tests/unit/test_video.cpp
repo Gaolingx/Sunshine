@@ -215,45 +215,19 @@ TEST_F(NvencQualityOptionsTest, KeepsSingleFrameVbvWhenMillisecondsAreOutOfRange
   EXPECT_EQ(0, config::video.nv.vbv_milliseconds);
 }
 
-TEST_F(NvencQualityOptionsTest, AppliesLookaheadDepth) {
-  config::apply_config_for_test("nvenc_lookahead_depth = 5\n");
-
-  EXPECT_EQ(5, config::video.nv.lookahead_depth);
-}
-
-TEST_F(NvencQualityOptionsTest, KeepsLookaheadDisabledWhenDepthIsOutOfRange) {
-  config::apply_config_for_test("nvenc_lookahead_depth = 17\n");
-
-  EXPECT_EQ(0, config::video.nv.lookahead_depth);
-}
-
-TEST_F(NvencQualityOptionsTest, AppliesLookaheadLevel) {
-  config::apply_config_for_test("nvenc_lookahead_level = 2\n");
-
-  EXPECT_EQ(2, config::video.nv.lookahead_level);
-}
-
-TEST_F(NvencQualityOptionsTest, KeepsDriverDefaultLookaheadLevelWhenOutOfRange) {
-  config::apply_config_for_test("nvenc_lookahead_level = 4\n");
-
-  EXPECT_EQ(0, config::video.nv.lookahead_level);
-}
-
 #if !defined(__APPLE__)
 /**
- * @brief Regression coverage for the NVENC rate control lookahead pipeline.
+ * @brief Regression coverage for the NVENC input surface ring and stream tail.
  *
- * Lookahead makes the driver buffer several pictures, so the encoder has to rotate input surfaces,
- * retrieve only finished bitstreams and drain the tail before teardown. A mistake in any of those
- * steps makes the encoder fail validation and disappear from the available encoders.
+ * The encoder rotates input surfaces, retrieves only finished bitstreams and drains the tail before
+ * teardown. A mistake in any of those steps makes the encoder fail validation and disappear from the
+ * available encoders.
  */
-struct NvencLookaheadTest: PlatformTestSuite {
+struct NvencEncodePipelineTest: PlatformTestSuite {
   void SetUp() override {
     BaseTest::SetUp();
     original_nv = config::video.nv;
     config::video.nv = nvenc::nvenc_config {};
-    config::video.nv.lookahead_depth = 4;
-    config::video.nv.lookahead_level = 2;
     config::video.nv.vbv_milliseconds = 300;
   }
 
@@ -265,19 +239,12 @@ struct NvencLookaheadTest: PlatformTestSuite {
   nvenc::nvenc_config original_nv {};  ///< NVENC configuration restored after each test.
 };
 
-TEST_F(NvencLookaheadTest, ValidatesAndEncodesWithLookaheadAndVbv) {
+TEST_F(NvencEncodePipelineTest, ValidatesAndEncodesWithVbv) {
   if (video::validate_encoder(video::nvenc, false)) {
     return;
   }
 
-  // Distinguish a machine without a usable NVENC encoder from a configuration that breaks probing.
-  // The H.264 encoder rejects a non-zero lookahead level, so the option must not be applied to it.
-  config::video.nv.lookahead_level = 0;
-  if (!video::validate_encoder(video::nvenc, false)) {
-    GTEST_SKIP() << "NVENC encoder not available";
-  }
-
-  FAIL() << "NVENC encoder only validates when the lookahead level is disabled";
+  GTEST_SKIP() << "NVENC encoder not available";
 }
 #endif
 

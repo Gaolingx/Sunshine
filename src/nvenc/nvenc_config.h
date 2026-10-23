@@ -6,20 +6,9 @@
 
 // standard includes
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 
 namespace nvenc {
-
-  /**
-   * @brief Maximum lookahead depth accepted by the NVENC SDK with no B-frames.
-   */
-  constexpr int max_lookahead_depth = 16;
-
-  /**
-   * @brief Maximum rate control lookahead level defined by the NVENC SDK.
-   */
-  constexpr int max_lookahead_level = 3;
 
   /**
    * @brief Largest H.264 reference picture list L0 accepted by the NVENC SDK.
@@ -120,12 +109,6 @@ namespace nvenc {
 
     // Size of the VBV/HRD buffer in milliseconds of target bitrate, zero keeps the default single frame buffer
     int vbv_milliseconds = 0;  ///< Vbv buffer size in milliseconds.
-
-    // Number of frames the rate control may look ahead, zero disables lookahead buffering
-    int lookahead_depth = 0;  ///< Rate control lookahead depth in frames.
-
-    // Analysis level of the rate control lookahead, zero keeps the level derived from the tuning info
-    int lookahead_level = 0;  ///< Rate control lookahead analysis level.
   };
 
   /**
@@ -181,21 +164,6 @@ namespace nvenc {
    */
   inline std::uint32_t dpb_size(int requested_count, std::uint32_t default_count) {
     return requested_count > 0 ? static_cast<std::uint32_t>(requested_count) : std::max(default_count, std::uint32_t {1});
-  }
-
-  /**
-   * @brief Compute how many NVENC input surfaces one lookahead depth requires to run.
-   *
-   * The driver holds `lookahead_depth` pictures in steady state, one more surface is being
-   * converted, and one spare keeps the ring from running full. At least two surfaces are
-   * allocated so that a picture the driver still holds never blocks the next submission.
-   *
-   * @param lookahead_depth Effective lookahead depth the driver was initialized with.
-   * @return Number of input surfaces that must stay allocated and registered.
-   */
-  inline std::size_t input_surface_count(int lookahead_depth) {
-    const auto depth = static_cast<std::size_t>(lookahead_depth > 0 ? lookahead_depth : 0);
-    return depth + 2;
   }
 
 }  // namespace nvenc

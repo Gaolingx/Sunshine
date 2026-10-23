@@ -449,15 +449,6 @@ namespace video {
      * @param last_frame Last frame.
      */
     virtual void invalidate_ref_frames(int64_t first_frame, int64_t last_frame) = 0;
-
-    /**
-     * @brief Get the number of frames the encoder buffers before it emits one.
-     *
-     * @return Buffered frame count, zero for encoders that emit every submitted frame.
-     */
-    virtual int lookahead_depth() const {
-      return 0;
-    }
   };
 
   // encoders

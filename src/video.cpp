@@ -601,19 +601,6 @@ namespace video {
     }
 
     /**
-     * @brief Get the rate control lookahead depth the driver was initialized with.
-     *
-     * @return Effective lookahead depth, zero when lookahead is disabled or unsupported.
-     */
-    int lookahead_depth() const override {
-      if (!device || !device->nvenc) {
-        return 0;
-      }
-
-      return device->nvenc->lookahead_depth();
-    }
-
-    /**
      * @brief Submit the next frame to NVENC and collect the frames that became available.
      *
      * @param frame_index Monotonic frame index assigned by the video pipeline.
@@ -654,7 +641,7 @@ namespace video {
     }
 
     /**
-     * @brief Ask NVENC to finish every frame still buffered by the rate control lookahead.
+     * @brief Ask NVENC to finish every frame still buffered by the driver.
      *
      * @param out_frames Appended with every frame that NVENC drained.
      * @return `true` on success, `false` on encoding failure.
@@ -2004,8 +1991,7 @@ namespace video {
   int encode_nvenc(int64_t frame_nr, nvenc_encode_session_t &session, safe::mail_raw_t::queue_t<packet_t> &packets, void *channel_data, std::optional<std::chrono::steady_clock::time_point> frame_timestamp, bool repeat_last_frame) {
     std::vector<nvenc::nvenc_encoded_frame> encoded_frames;
 
-    // Rate control lookahead makes NVENC buffer frames internally, so a submission does not always
-    // produce a packet. A submission either finishes nothing or exactly one earlier picture.
+    // NVENC may buffer a submitted frame internally, so a submission does not always produce a packet.
     if (!session.encode_frame(frame_nr, frame_timestamp, repeat_last_frame, encoded_frames)) {
       BOOST_LOG(error) << "NvEnc failed to encode a frame";
       return -1;
@@ -2310,11 +2296,6 @@ namespace video {
       for (auto &option : video_format.common_options) {
         handle_option(option);
       }
-#ifndef __APPLE__
-      if (retries == 0 && encoder.name == "nvenc" && config::video.nv.lookahead_depth > 0) {
-        BOOST_LOG(warning) << "Rate control lookahead is not applied by the FFmpeg NVENC encoder, use the standalone NVENC encoder to enable it"sv;
-      }
-#endif
       for (auto &option : (config.dynamicRange ? video_format.hdr_options : video_format.sdr_options)) {
         handle_option(option);
       }
@@ -2634,7 +2615,7 @@ namespace video {
       platf::enable_mouse_keys();
     }
 
-    // Rate control lookahead buffers frames inside NVENC, so the tail of the stream has to be drained
+    // NVENC may still hold the last submitted frame, so the tail of the stream has to be drained
     // before the encoder is torn down. Packets are pointless once the stream is shutting down.
     if (!shutdown_event->peek()) {
       if (auto nvenc_session = dynamic_cast<nvenc_encode_session_t *>(session.get())) {
@@ -3167,17 +3148,16 @@ namespace video {
 
     auto packets = mail::man->queue<packet_t>(mail::video_packets);
 
-    // Encoders that buffer pictures emit the first packet only after several submissions. NVENC needs
-    // as many submissions as its input ring holds, the others report no depth and get a fixed slack.
+    // Encoders that buffer pictures emit the first packet only after several submissions, so probe
+    // a fixed number of frames before giving up.
     constexpr int probe_frame_slack = 8;
-    const auto max_probe_frames = static_cast<int>(std::max(nvenc::input_surface_count(session->lookahead_depth()), static_cast<std::size_t>(probe_frame_slack)));
-    for (int probe_frame = 1; probe_frame <= max_probe_frames && !packets->peek(); ++probe_frame) {
+    for (int probe_frame = 1; probe_frame <= probe_frame_slack && !packets->peek(); ++probe_frame) {
       if (encode(probe_frame, *session, packets, nullptr, {}, probe_frame > 1)) {
         return -1;
       }
     }
 
-    // The lookahead window may still hold the first picture, in which case it has to be drained
+    // The encoder may still hold the first picture, in which case it has to be drained
     if (!packets->peek()) {
       if (auto nvenc_session = dynamic_cast<nvenc_encode_session_t *>(session.get())) {
         flush_nvenc(*nvenc_session, packets, nullptr);
