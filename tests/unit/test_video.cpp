@@ -179,6 +179,12 @@ TEST_F(NvencQualityOptionsTest, AppliesNonReferencePFrames) {
 #endif
 }
 
+TEST_F(NvencQualityOptionsTest, AppliesUnidirectionalBFrames) {
+  config::apply_config_for_test("nvenc_unidirectional_b = enabled\n");
+
+  EXPECT_TRUE(config::video.nv.unidirectional_b_frames);
+}
+
 TEST_F(NvencQualityOptionsTest, AppliesTemporalAdaptiveQuantization) {
   config::apply_config_for_test("nvenc_temporal_aq = enabled\n");
 

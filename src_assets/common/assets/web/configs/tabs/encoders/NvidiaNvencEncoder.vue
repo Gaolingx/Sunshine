@@ -126,6 +126,14 @@ const config = ref(props.config)
                       v-model="config.nvenc_nonref_p"
                       default="false"
             ></Checkbox>
+
+            <!-- Unidirectional B-frames -->
+            <Checkbox class="mb-3"
+                      id="nvenc_unidirectional_b"
+                      locale-prefix="config"
+                      v-model="config.nvenc_unidirectional_b"
+                      default="false"
+            ></Checkbox>
           </div>
         </div>
       </div>

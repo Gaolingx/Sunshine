@@ -1621,6 +1621,7 @@ namespace config {
     bool_f(vars, "nvenc_temporal_aq", video.nv.temporal_adaptive_quantization);
     int_between_f(vars, "nvenc_aq_strength", video.nv.aq_strength, {0, 15});
     bool_f(vars, "nvenc_nonref_p", video.nv.non_reference_p_frames);
+    bool_f(vars, "nvenc_unidirectional_b", video.nv.unidirectional_b_frames);
     bool_f(vars, "nvenc_enable_min_qp", video.nv.enable_min_qp);
     int_between_f(vars, "nvenc_min_qp_h264", video.nv.min_qp_h264, {0, 51});
     int_between_f(vars, "nvenc_min_qp_hevc", video.nv.min_qp_hevc, {0, 51});

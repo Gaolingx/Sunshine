@@ -2560,6 +2560,35 @@ supported on the current platform.
     </tr>
 </table>
 
+### nvenc_unidirectional_b
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Replace P-frames with B-frames that reference only past frames. Both reference lists are
+            built from frames that were already submitted, so the decode order stays equal to the
+            display order and no reordering delay is added. The second reference improves compression
+            efficiency of motion-heavy content, where a P-frame only has one candidate to predict from.
+            @note{This option only applies when using NVENC [encoder](#encoder).}
+            @note{Only supported by the HEVC encoder, and only when the GPU reports support and at
+            least two reference frames are available. Other codecs and configurations ignore it.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_unidirectional_b = disabled
+            @endcode</td>
+    </tr>
+</table>
+
 ### nvenc_enable_min_qp
 
 <table>
