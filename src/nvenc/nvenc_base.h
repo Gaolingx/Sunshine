@@ -242,6 +242,21 @@ namespace NVENC_NAMESPACE {
     ) const;
 
     /**
+     * @brief Configure unidirectional B-frames for the selected SDK.
+     *
+     * Only enabled for HEVC when the GPU reports support and the DPB holds enough reference frames.
+     *
+     * @param init_params Encoder initialization parameters to update.
+     * @param config NVENC encoder configuration.
+     * @param client_config Stream configuration requested by the client.
+     */
+    void configure_unidirectional_b(
+      NV_ENC_INITIALIZE_PARAMS &init_params,
+      const ::nvenc::nvenc_config &config,
+      const video::config_t &client_config
+    ) const;
+
+    /**
      * @brief Configure rate control and VBV options.
      *
      * @param enc_config Encoder configuration to update.

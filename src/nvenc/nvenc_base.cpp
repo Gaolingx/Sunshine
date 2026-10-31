@@ -247,6 +247,33 @@ namespace NVENC_NAMESPACE {
 #endif
   }
 
+  void nvenc_base::configure_unidirectional_b(
+    NV_ENC_INITIALIZE_PARAMS &init_params,
+    const ::nvenc::nvenc_config &config,
+    const video::config_t &client_config
+  ) const {
+    // The NVENC SDK exposes unidirectional B-frames for the HEVC encoder only.
+    if (!config.unidirectional_b_frames || client_config.videoFormat != 1) {
+      return;
+    }
+
+#if NVENC_SDK_VERSION >= 1300
+    const auto supports_unidirectional_b = get_encoder_cap(init_params.encodeGUID, NV_ENC_CAPS_SUPPORT_UNIDIRECTIONAL_B) != 0;
+    if (!supports_unidirectional_b) {
+      BOOST_LOG(warning) << "NvEnc: gpu doesn't support unidirectional B-frames for HEVC, ignoring";
+      return;
+    }
+    if (!::nvenc::use_unidirectional_b_frames(config.unidirectional_b_frames, supports_unidirectional_b, encoder_params.ref_frames_in_dpb)) {
+      BOOST_LOG(warning) << "NvEnc: unidirectional B-frames need at least two reference frames, but only "
+                         << encoder_params.ref_frames_in_dpb << " are available, ignoring";
+      return;
+    }
+    init_params.enableUniDirectionalB = 1;
+#else
+    BOOST_LOG(warning) << "NvEnc: unidirectional B-frames require NVENC API 13.0; ignoring";
+#endif
+  }
+
   void nvenc_base::configure_rate_control(
     NV_ENC_CONFIG &enc_config,
     const ::nvenc::nvenc_config &config,
@@ -715,24 +742,7 @@ namespace NVENC_NAMESPACE {
     enc_config.profileGUID = NV_ENC_CODEC_PROFILE_AUTOSELECT_GUID;
     configure_rate_control(enc_config, config, client_config, init_params.encodeGUID);
     configure_codec(enc_config, config, client_config, colorspace, buffer_format, init_params.encodeGUID);
-#if NVENC_SDK_VERSION >= 1300
-    if (config.unidirectional_b_frames) {
-      const auto supports_unidirectional_b = get_encoder_cap(init_params.encodeGUID, NV_ENC_CAPS_SUPPORT_UNIDIRECTIONAL_B) != 0;
-      if (::nvenc::use_unidirectional_b_frames(config.unidirectional_b_frames, supports_unidirectional_b, encoder_params.ref_frames_in_dpb)) {
-        init_params.enableUniDirectionalB = 1;
-      } else if (!supports_unidirectional_b) {
-        BOOST_LOG(warning) << "NvEnc: gpu doesn't support unidirectional B-frames for "
-                           << video_format_name(client_config.videoFormat) << ", ignoring";
-      } else {
-        BOOST_LOG(warning) << "NvEnc: unidirectional B-frames need at least two reference frames, but only "
-                           << encoder_params.ref_frames_in_dpb << " are available, ignoring";
-      }
-    }
-#else
-    if (config.unidirectional_b_frames) {
-      BOOST_LOG(warning) << "NvEnc: unidirectional B-frames require NVENC API 13.0; ignoring";
-    }
-#endif
+    configure_unidirectional_b(init_params, config, client_config);
     init_params.encodeConfig = &enc_config;
 
     if (!initialize_encoder_resources(init_params)) {
