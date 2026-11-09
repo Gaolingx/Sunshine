@@ -351,8 +351,6 @@
     "nvenc_min_qp_h264_desc": "Minimum QP used by the NVENC H.264 encoder when the minimum QP limit is enabled.",
     "nvenc_min_qp_hevc": "Minimum QP (HEVC)",
     "nvenc_min_qp_hevc_desc": "Minimum QP used by the NVENC HEVC encoder when the minimum QP limit is enabled.",
-    "nvenc_nonref_p": "Non-reference P-frames",
-    "nvenc_nonref_p_desc": "Insert automatically chosen non-reference P-frames. Such a frame has to be visually correct on its own instead of also being a good reference for later frames, which considerably reduces the bits it consumes. Notably improves compression efficiency of mostly static content such as a desktop. Non-reference frames are more susceptible to network packet loss.",
     "nvenc_opengl_vulkan_on_dxgi": "Present OpenGL/Vulkan on top of DXGI",
     "nvenc_opengl_vulkan_on_dxgi_desc": "Sunshine can't capture fullscreen OpenGL and Vulkan programs at full frame rate unless they present on top of DXGI. This is system-wide setting that is reverted on sunshine program exit.",
     "nvenc_preset": "Performance preset",

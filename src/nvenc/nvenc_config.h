@@ -71,9 +71,6 @@ namespace nvenc {
     // AQ strength from 1 to 15, zero uses the driver default
     int aq_strength = 0;  ///< Adaptive quantization strength.
 
-    // Insert automatically chosen non-reference P-frames, saves bitrate on static content
-    bool non_reference_p_frames = false;  ///< Enable non-reference P-frames for NVENC.
-
     // Replace P-frames with B-frames that only reference past frames, improves compression without adding latency
     bool unidirectional_b_frames = false;  ///< Enable unidirectional B-frames for NVENC.
 

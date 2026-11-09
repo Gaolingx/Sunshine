@@ -99,18 +99,16 @@ TEST(NvencAvcodecOptionsTest, ExposesBitrateEfficiencyOptions) {
     &video::nvenc.h264,
   };
 
-  const std::array<std::string_view, 4> option_names {
+  const std::array<std::string_view, 3> option_names {
     "ldkfs"sv,
     "aq-strength"sv,
     "temporal-aq"sv,
-    "nonref_p"sv,
   };
 
-  const std::array<int *, 4> expected_targets {
+  const std::array<int *, 3> expected_targets {
     &config::video.nv_legacy.ldkfs,
     &config::video.nv_legacy.aq_strength,
     &config::video.nv_legacy.temporal_aq,
-    &config::video.nv_legacy.nonref_p,
   };
 
   for (const auto *codec : codecs) {
@@ -167,15 +165,6 @@ TEST_F(NvencQualityOptionsTest, KeepsDriverDefaultWhenAdaptiveQuantizationStreng
   EXPECT_EQ(0, config::video.nv.aq_strength);
 #if !defined(__ANDROID__) && !defined(__APPLE__)
   EXPECT_EQ(0, config::video.nv_legacy.aq_strength);
-#endif
-}
-
-TEST_F(NvencQualityOptionsTest, AppliesNonReferencePFrames) {
-  config::apply_config_for_test("nvenc_nonref_p = enabled\n");
-
-  EXPECT_TRUE(config::video.nv.non_reference_p_frames);
-#if !defined(__ANDROID__) && !defined(__APPLE__)
-  EXPECT_EQ(1, config::video.nv_legacy.nonref_p);
 #endif
 }
 

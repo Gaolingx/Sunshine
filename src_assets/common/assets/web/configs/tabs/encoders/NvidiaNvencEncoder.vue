@@ -119,14 +119,6 @@ const config = ref(props.config)
               <div class="form-text">{{ $t('config.nvenc_ldkfs_desc') }}</div>
             </div>
 
-            <!-- Non-reference P-frames -->
-            <Checkbox class="mb-3"
-                      id="nvenc_nonref_p"
-                      locale-prefix="config"
-                      v-model="config.nvenc_nonref_p"
-                      default="false"
-            ></Checkbox>
-
             <!-- Unidirectional B-frames -->
             <Checkbox class="mb-3"
                       id="nvenc_unidirectional_b"

@@ -2532,33 +2532,6 @@ supported on the current platform.
     </tr>
 </table>
 
-### nvenc_nonref_p
-
-<table>
-    <tr>
-        <td>Description</td>
-        <td colspan="2">
-            Insert automatically chosen non-reference P frames. Such a frame has to be visually correct on its own
-            instead of also being a good reference for later frames, which reduces the bits it consumes considerably.
-            This notably improves compression efficiency of mostly static content such as a desktop.
-            @note{This option only applies when using NVENC [encoder](#encoder).}
-            @warning{Non-reference frames are more susceptible to network packet loss.}
-        </td>
-    </tr>
-    <tr>
-        <td>Default</td>
-        <td colspan="2">@code{}
-            disabled
-            @endcode</td>
-    </tr>
-    <tr>
-        <td>Example</td>
-        <td colspan="2">@code{}
-            nvenc_nonref_p = disabled
-            @endcode</td>
-    </tr>
-</table>
-
 ### nvenc_unidirectional_b
 
 <table>

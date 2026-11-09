@@ -834,7 +834,6 @@ namespace video {
         {"spatial-aq"s, &config::video.nv_legacy.spatial_aq},
         {"temporal-aq"s, &config::video.nv_legacy.temporal_aq},
         {"aq-strength"s, &config::video.nv_legacy.aq_strength},
-        {"nonref_p"s, &config::video.nv_legacy.nonref_p},
         {"ldkfs"s, &config::video.nv_legacy.ldkfs},
       },
       {},  // SDR-specific options
@@ -860,7 +859,6 @@ namespace video {
         {"spatial-aq"s, &config::video.nv_legacy.spatial_aq},
         {"temporal-aq"s, &config::video.nv_legacy.temporal_aq},
         {"aq-strength"s, &config::video.nv_legacy.aq_strength},
-        {"nonref_p"s, &config::video.nv_legacy.nonref_p},
         {"ldkfs"s, &config::video.nv_legacy.ldkfs},
       },
       {
@@ -892,7 +890,6 @@ namespace video {
         {"spatial-aq"s, &config::video.nv_legacy.spatial_aq},
         {"temporal-aq"s, &config::video.nv_legacy.temporal_aq},
         {"aq-strength"s, &config::video.nv_legacy.aq_strength},
-        {"nonref_p"s, &config::video.nv_legacy.nonref_p},
         {"ldkfs"s, &config::video.nv_legacy.ldkfs},
       },
       {

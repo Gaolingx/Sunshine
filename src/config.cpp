@@ -1620,7 +1620,6 @@ namespace config {
     bool_f(vars, "nvenc_spatial_aq", video.nv.adaptive_quantization);
     bool_f(vars, "nvenc_temporal_aq", video.nv.temporal_adaptive_quantization);
     int_between_f(vars, "nvenc_aq_strength", video.nv.aq_strength, {0, 15});
-    bool_f(vars, "nvenc_nonref_p", video.nv.non_reference_p_frames);
     bool_f(vars, "nvenc_unidirectional_b", video.nv.unidirectional_b_frames);
     bool_f(vars, "nvenc_enable_min_qp", video.nv.enable_min_qp);
     int_between_f(vars, "nvenc_min_qp_h264", video.nv.min_qp_h264, {0, 51});
@@ -1647,7 +1646,6 @@ namespace config {
     video.nv_legacy.temporal_aq = video.nv.temporal_adaptive_quantization;
     video.nv_legacy.ldkfs = video.nv.low_delay_key_frame_scale;
     video.nv_legacy.aq_strength = video.nv.aq_strength;
-    video.nv_legacy.nonref_p = video.nv.non_reference_p_frames;
 #endif
 
     int_f(vars, "qsv_preset", video.qsv.qsv_preset, qsv::preset_from_view);

@@ -310,7 +310,6 @@ namespace NVENC_NAMESPACE {
       // The field stores four bits, higher values are truncated by the driver
       enc_config.rcParams.aqStrength = std::min(config.aq_strength, 15);
     }
-    enc_config.rcParams.enableNonRefP = config.non_reference_p_frames;
     // The target bitrate and the VBV window must be based on the same value, otherwise a configured
     // max_bitrate ceiling would cap one of them but not the other.
     const auto bitrate_kbps = ::nvenc::effective_bitrate_kbps(client_config.bitrate, config::video.max_bitrate);
@@ -609,9 +608,6 @@ namespace NVENC_NAMESPACE {
     }
     if (enc_config.rcParams.aqStrength != 0) {
       extra += std::format(" aq-strength={}", enc_config.rcParams.aqStrength);
-    }
-    if (enc_config.rcParams.enableNonRefP) {
-      extra += " nonref-p";
     }
 #if NVENC_SDK_VERSION >= 1300
     if (init_params.enableUniDirectionalB) {

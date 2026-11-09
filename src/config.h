@@ -90,7 +90,6 @@ namespace config {
       int temporal_aq;  ///< FFmpeg NVENC temporal adaptive-quantization mode.
       int ldkfs;  ///< FFmpeg NVENC low delay key frame scale, zero uses the encoder default.
       int aq_strength;  ///< FFmpeg NVENC adaptive-quantization strength, zero uses the encoder default.
-      int nonref_p;  ///< FFmpeg NVENC non-reference P-frame insertion mode.
     } nv_legacy;  ///< Legacy NVIDIA encoder options kept for config compatibility.
 
     struct {
