@@ -2334,12 +2334,8 @@ namespace video {
           ctx->rc_buffer_size = bitrate / config.framerate;
 
 #ifndef __APPLE__
-          if (encoder.name == "nvenc" && config::video.nv.vbv_milliseconds > 0) {
-            // Use the same buffer derivation as the standalone NVENC encoder, so both paths agree on
-            // the single-frame floor and on the bitrate the window is based on.
-            const auto bitrate_kbps = ::nvenc::effective_bitrate_kbps(config.bitrate, config::video.max_bitrate);
-            const auto buffer_size = ::nvenc::vbv_buffer_size_bits(config::video.nv, config.framerate, bitrate_kbps);
-            ctx->rc_buffer_size = static_cast<int>(std::min<std::uint64_t>(buffer_size, std::numeric_limits<int>::max()));
+          if (encoder.name == "nvenc" && config::video.nv_legacy.vbv_percentage_increase > 0) {
+            ctx->rc_buffer_size += ctx->rc_buffer_size * config::video.nv_legacy.vbv_percentage_increase / 100;
           }
 #endif
         }

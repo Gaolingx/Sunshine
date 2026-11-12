@@ -2464,18 +2464,18 @@ supported on the current platform.
     </tr>
 </table>
 
-### nvenc_vbv_ms
+### nvenc_vbv_increase
 
 <table>
     <tr>
         <td>Description</td>
         <td colspan="2">
-            VBV/HRD buffer size expressed in milliseconds of the target bitrate, which is the bitrate requested by
-            the client capped by [max_bitrate](#max_bitrate).
-            By default Sunshine uses a single-frame VBV/HRD, so the encoder has no room to spend extra bits on complex
-            frames. Setting this to a positive value gives the rate controller a longer window while keeping the
-            requested bitrate and constant bitrate mode unchanged, which typically improves quality on scenes with
-            motion, at the cost of a burst that the network must be able to absorb.
+            Single-frame VBV/HRD percentage increase.
+            By default Sunshine uses single-frame VBV/HRD, which means any encoded video frame size is not expected to
+            exceed requested bitrate divided by requested frame rate. Relaxing this restriction can be beneficial and
+            act as low-latency variable bitrate, but may also lead to packet loss if the network doesn't have buffer
+            headroom to handle bitrate spikes. Maximum accepted value is 400, which corresponds to 5x increased
+            encoded video frame upper size limit.
             @note{This option only applies when using NVENC [encoder](#encoder).}
             @warning{Can lead to network packet loss.}
         </td>
@@ -2488,12 +2488,12 @@ supported on the current platform.
     </tr>
     <tr>
         <td>Range</td>
-        <td colspan="2">0-1000</td>
+        <td colspan="2">0-400</td>
     </tr>
     <tr>
         <td>Example</td>
         <td colspan="2">@code{}
-            nvenc_vbv_ms = 0
+            nvenc_vbv_increase = 0
             @endcode</td>
     </tr>
 </table>
@@ -2509,7 +2509,7 @@ supported on the current platform.
             controller more room to recover afterwards, a lower value restricts the intra refresh frame so that a large
             scene change cannot be followed by a visible quality dip.
             @note{This option only applies when using NVENC [encoder](#encoder).}
-            @note{Only used when a single frame VBV/HRD is in effect, see [nvenc_vbv_ms](#nvenc_vbv_ms).}
+            @note{Only used when a single frame VBV/HRD is in effect, see [nvenc_vbv_increase](#nvenc_vbv_increase).}
             @note{A value of 0 keeps the driver default, which is 1 for the ultra low latency tuning information
             Sunshine uses.}
         </td>
@@ -2682,7 +2682,7 @@ supported on the current platform.
             frame fits into the available bitrate budget, which can turn a frame the encoder cannot afford into a
             heavily quantized blur. Capping the QP keeps such frames recognizable and instead lets the encoder
             overshoot the single frame VBV/HRD limit, so it is recommended to combine this option with
-            [nvenc_vbv_ms](#nvenc_vbv_ms).
+            [nvenc_vbv_increase](#nvenc_vbv_increase).
             @note{This option only applies when using NVENC [encoder](#encoder).}
             @warning{Can lead to network packet loss.}
         </td>

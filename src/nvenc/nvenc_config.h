@@ -59,6 +59,9 @@ namespace nvenc {
     // Use optional preliminary pass for better motion vectors, bitrate distribution and stricter VBV(HRD), uses CUDA cores
     nvenc_two_pass two_pass = nvenc_two_pass::quarter_resolution;  ///< Two pass.
 
+    // Percentage increase of VBV/HRD from the default single frame, allows low-latency variable bitrate
+    int vbv_percentage_increase = 0;  ///< Vbv percentage increase.
+
     // Ratio of I-frame bits to P-frame bits in single frame VBV CBR mode, zero uses the driver default of the tuning info
     int low_delay_key_frame_scale = 0;  ///< Low delay key frame scale.
 
@@ -106,9 +109,6 @@ namespace nvenc {
 
     // Enable split-frame encoding if the gpu has multiple NVENC hardware clusters
     nvenc_split_frame_encoding split_frame_encoding = nvenc_split_frame_encoding::driver_decides;  ///< Split frame encoding.
-
-    // Size of the VBV/HRD buffer in milliseconds of target bitrate, zero keeps the default single frame buffer
-    int vbv_milliseconds = 0;  ///< Vbv buffer size in milliseconds.
   };
 
   /**
@@ -124,32 +124,6 @@ namespace nvenc {
    */
   inline int effective_bitrate_kbps(int requested_kbps, int ceiling_kbps) {
     return ceiling_kbps > 0 ? std::min(requested_kbps, ceiling_kbps) : requested_kbps;
-  }
-
-  /**
-   * @brief Compute the VBV/HRD buffer size in bits requested by the configuration.
-   *
-   * @param config NVENC encoder configuration.
-   * @param framerate Encoded frames per second.
-   * @param bitrate_kbps Target bitrate in kilobits per second.
-   * @return Buffer size in bits, a single frame of target bitrate when no larger window is requested.
-   */
-  inline std::uint64_t vbv_buffer_size_bits(const nvenc_config &config, int framerate, int bitrate_kbps) {
-    if (framerate <= 0 || bitrate_kbps <= 0) {
-      return 0;
-    }
-
-    const auto bitrate = static_cast<std::uint64_t>(bitrate_kbps);
-    const auto single_frame_size = bitrate * 1000 / static_cast<std::uint64_t>(framerate);
-
-    if (config.vbv_milliseconds > 0) {
-      const auto requested = bitrate * static_cast<std::uint64_t>(config.vbv_milliseconds);
-      if (requested > single_frame_size) {
-        return requested;
-      }
-    }
-
-    return single_frame_size;
   }
 
   /**

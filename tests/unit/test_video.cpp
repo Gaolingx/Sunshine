@@ -198,16 +198,22 @@ TEST_F(NvencQualityOptionsTest, KeepsDriverDefaultKeyFrameScaleWhenOutOfRange) {
   EXPECT_EQ(0, config::video.nv.low_delay_key_frame_scale);
 }
 
-TEST_F(NvencQualityOptionsTest, AppliesVbvSizeInMilliseconds) {
-  config::apply_config_for_test("nvenc_vbv_ms = 500\n");
+TEST_F(NvencQualityOptionsTest, AppliesVbvPercentageIncrease) {
+  config::apply_config_for_test("nvenc_vbv_increase = 200\n");
 
-  EXPECT_EQ(500, config::video.nv.vbv_milliseconds);
+  EXPECT_EQ(200, config::video.nv.vbv_percentage_increase);
+#if !defined(__ANDROID__) && !defined(__APPLE__)
+  EXPECT_EQ(200, config::video.nv_legacy.vbv_percentage_increase);
+#endif
 }
 
-TEST_F(NvencQualityOptionsTest, KeepsSingleFrameVbvWhenMillisecondsAreOutOfRange) {
-  config::apply_config_for_test("nvenc_vbv_ms = 1001\n");
+TEST_F(NvencQualityOptionsTest, KeepsSingleFrameVbvWhenIncreaseIsOutOfRange) {
+  config::apply_config_for_test("nvenc_vbv_increase = 401\n");
 
-  EXPECT_EQ(0, config::video.nv.vbv_milliseconds);
+  EXPECT_EQ(0, config::video.nv.vbv_percentage_increase);
+#if !defined(__ANDROID__) && !defined(__APPLE__)
+  EXPECT_EQ(0, config::video.nv_legacy.vbv_percentage_increase);
+#endif
 }
 
 #if !defined(__APPLE__)
@@ -223,7 +229,7 @@ struct NvencEncodePipelineTest: PlatformTestSuite {
     BaseTest::SetUp();
     original_nv = config::video.nv;
     config::video.nv = nvenc::nvenc_config {};
-    config::video.nv.vbv_milliseconds = 300;
+    config::video.nv.vbv_percentage_increase = 100;
   }
 
   void TearDown() override {

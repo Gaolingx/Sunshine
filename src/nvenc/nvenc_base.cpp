@@ -315,8 +315,10 @@ namespace NVENC_NAMESPACE {
     const auto bitrate_kbps = ::nvenc::effective_bitrate_kbps(client_config.bitrate, config::video.max_bitrate);
     enc_config.rcParams.averageBitRate = bitrate_kbps * 1000;
     if (get_encoder_cap(encode_guid, NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE)) {
-      const auto buffer_size = ::nvenc::vbv_buffer_size_bits(config, client_config.framerate, bitrate_kbps);
-      enc_config.rcParams.vbvBufferSize = static_cast<uint32_t>(std::min<std::uint64_t>(buffer_size, UINT32_MAX));
+      enc_config.rcParams.vbvBufferSize = client_config.bitrate * 1000 / client_config.framerate;
+      if (config.vbv_percentage_increase > 0) {
+        enc_config.rcParams.vbvBufferSize += enc_config.rcParams.vbvBufferSize * config.vbv_percentage_increase / 100;
+      }
     }
   }
 
@@ -587,12 +589,8 @@ namespace NVENC_NAMESPACE {
     if (enc_config.rcParams.multiPass != NV_ENC_MULTI_PASS_DISABLED) {
       extra += " two-pass";
     }
-    if (enc_config.rcParams.vbvBufferSize != 0) {
-      const auto bitrate_kbps = ::nvenc::effective_bitrate_kbps(client_config.bitrate, config::video.max_bitrate);
-      extra += std::format(
-        " vbv={}ms",
-        static_cast<int>(std::lround(enc_config.rcParams.vbvBufferSize * 1000.0 / (bitrate_kbps * 1000.0)))
-      );
+    if (config.vbv_percentage_increase > 0 && get_encoder_cap(init_params.encodeGUID, NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE)) {
+      extra += std::format(" vbv+{}", config.vbv_percentage_increase);
     }
     if (config.low_delay_key_frame_scale > 0) {
       extra += std::format(" ldkfs={}", config.low_delay_key_frame_scale);

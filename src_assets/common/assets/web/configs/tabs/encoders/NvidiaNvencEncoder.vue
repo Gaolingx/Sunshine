@@ -49,13 +49,13 @@ const config = ref(props.config)
       <div class="form-text">{{ $t('config.nvenc_twopass_desc') }}</div>
     </div>
 
-    <!-- VBV/HRD buffer size in milliseconds -->
+    <!-- Single-frame VBV/HRD percentage increase -->
     <div class="mb-3">
-      <label for="nvenc_vbv_ms" class="form-label">{{ $t('config.nvenc_vbv_ms') }}</label>
-      <input type="number" min="0" max="1000" class="form-control" id="nvenc_vbv_ms" placeholder="0"
-             v-model="config.nvenc_vbv_ms" />
+      <label for="nvenc_vbv_increase" class="form-label">{{ $t('config.nvenc_vbv_increase') }}</label>
+      <input type="number" min="0" max="400" class="form-control" id="nvenc_vbv_increase" placeholder="0"
+             v-model="config.nvenc_vbv_increase" />
       <div class="form-text">
-        {{ $t('config.nvenc_vbv_ms_desc') }}<br>
+        {{ $t('config.nvenc_vbv_increase_desc') }}<br>
         <br>
         <a href="https://en.wikipedia.org/wiki/Video_buffering_verifier">VBV/HRD</a>
       </div>
